@@ -3,6 +3,7 @@ Resume router: upload PDF/Word, extract text locally, summarize with LLM.
 """
 import io
 import json
+import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -188,10 +189,12 @@ async def download_resume(
         raise HTTPException(status_code=404, detail="原始文件不存在（该简历在功能上线前上传）")
 
     ct = resume.content_type or "application/octet-stream"
+    encoded_name = urllib.parse.quote(resume.filename, safe="")
+    content_disposition = f"attachment; filename*=UTF-8''{encoded_name}"
     return StreamingResponse(
         io.BytesIO(resume.file_data),
         media_type=ct,
-        headers={"Content-Disposition": f'attachment; filename="{resume.filename}"'},
+        headers={"Content-Disposition": content_disposition},
     )
 
 
