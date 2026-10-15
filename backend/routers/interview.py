@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.database import get_db
+from backend.database import get_db, AsyncSessionLocal
 from backend.models.user import User
 from backend.models.jd_session import JDSession
 from backend.models.interview_session import InterviewSession
@@ -14,8 +15,52 @@ from backend.routers.auth import get_current_user
 from backend.schemas import InterviewStartRequest, InterviewAnswerRequest, InterviewSessionResponse
 from backend.agents.interviewer import run_interviewer_start, run_interviewer_answer
 from backend.agents.evaluator import run_evaluator
+from backend.agents.study_planner import run_study_planner
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
+
+
+async def _regenerate_study_plan_cache(jd_session_id: int, user_id: int) -> None:
+    """Background task: regenerate and cache the study plan after an interview ends.
+
+    Opens its own DB session so it can run independently of the request lifecycle.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            jd_result = await db.execute(
+                select(JDSession).where(
+                    JDSession.id == jd_session_id,
+                    JDSession.user_id == user_id,
+                )
+            )
+            jd_session = jd_result.scalar_one_or_none()
+            if not jd_session:
+                return
+
+            # Use the most recent report (the one we just saved)
+            report_result = await db.execute(
+                select(InterviewReport)
+                .where(
+                    InterviewReport.user_id == user_id,
+                    InterviewReport.jd_session_id == jd_session_id,
+                )
+                .order_by(InterviewReport.created_at.desc())
+                .limit(1)
+            )
+            latest_report = report_result.scalar_one_or_none()
+            history_report_json = latest_report.report_json if latest_report else None
+
+            chunks = []
+            async for chunk in run_study_planner(
+                jd_analysis=jd_session.analysis_result or jd_session.jd_text,
+                history_report_json=history_report_json,
+            ):
+                chunks.append(chunk)
+
+            jd_session.study_plan_cache = "".join(chunks)
+            await db.commit()
+    except Exception:
+        pass  # Background task — swallow errors silently
 
 
 @router.post("/start", response_model=InterviewSessionResponse)
@@ -46,7 +91,7 @@ async def start_interview(
         .limit(1)
     )
     latest_report = report_result.scalar_one_or_none()
-    history_report_json = latest_report.report_json if latest_report else None
+    history_report_json = latest_report.report_json if latest_report else None  # noqa: F841
 
     interview = InterviewSession(
         user_id=current_user.id,
@@ -108,7 +153,7 @@ async def answer_question(
         code_submissions.append({
             "code": body.code,
             "language": body.language or "python",
-            "result": None,  # filled after sandbox run
+            "result": None,
         })
 
     async def event_stream():
@@ -141,7 +186,7 @@ async def end_interview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """End the interview and trigger evaluation (SSE stream of report generation)."""
+    """End the interview, stream the evaluation report, then trigger background study plan refresh."""
     interview_result = await db.execute(
         select(InterviewSession).where(
             InterviewSession.id == interview_id,
@@ -158,6 +203,8 @@ async def end_interview(
 
     messages = json.loads(interview.messages)
     code_submissions = json.loads(interview.code_submissions)
+    jd_session_id = interview.jd_session_id
+    user_id = current_user.id
 
     async def event_stream():
         report_text = ""
@@ -178,8 +225,8 @@ async def end_interview(
         weak_summary = weak_match.group(1).strip() if weak_match else None
 
         report = InterviewReport(
-            user_id=current_user.id,
-            jd_session_id=interview.jd_session_id,
+            user_id=user_id,
+            jd_session_id=jd_session_id,
             interview_session_id=interview_id,
             overall_score=overall_score,
             report_json=report_text,
@@ -188,12 +235,18 @@ async def end_interview(
         db.add(report)
         await db.commit()
         await db.refresh(report)
+
+        # Kick off background study plan regeneration (non-blocking)
+        asyncio.create_task(
+            _regenerate_study_plan_cache(jd_session_id, user_id)
+        )
+
         yield f"data: {json.dumps({'type': 'done', 'report_id': report.id})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.get("/{interview_id}/opening")
+@router.post("/{interview_id}/opening")
 async def get_opening_question(
     interview_id: int,
     current_user: User = Depends(get_current_user),

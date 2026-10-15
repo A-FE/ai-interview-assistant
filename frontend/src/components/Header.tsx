@@ -1,36 +1,56 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export function Header() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleLogout = () => {
     logout()
     navigate('/')
   }
 
+  const navLink = (to: string, label: string) => {
+    const active = location.pathname === to
+    return (
+      <Link
+        to={to}
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+          active
+            ? 'bg-indigo-50 text-indigo-700'
+            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+        }`}
+      >
+        {label}
+      </Link>
+    )
+  }
+
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link to="/" className="font-bold text-lg text-blue-600 tracking-tight">
-          JobPrep Agent
+        <Link to="/" className="flex items-center gap-2 group">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+            AI
+          </div>
+          <span className="font-bold text-base text-gray-900 tracking-tight">
+            AI 面试助手
+          </span>
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
+
+        <nav className="flex items-center gap-1">
           {user ? (
             <>
-              <Link to="/jd" className="text-gray-600 hover:text-blue-600 transition-colors">
-                JD 分析
-              </Link>
-              <Link to="/user" className="text-gray-600 hover:text-blue-600 transition-colors">
-                用户中心
-              </Link>
-              <span className="text-gray-400 text-xs">
-                {user.is_guest ? '游客' : user.username}
+              {navLink('/jd', 'JD 分析')}
+              {navLink('/user', '用户中心')}
+              <div className="w-px h-4 bg-gray-200 mx-2" />
+              <span className="text-xs text-gray-400 px-1">
+                {user.is_guest ? '🙋 游客' : `👤 ${user.username}`}
               </span>
               <button
                 onClick={handleLogout}
-                className="text-gray-500 hover:text-red-500 transition-colors"
+                className="ml-1 px-3 py-1.5 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200"
               >
                 退出
               </button>
@@ -38,7 +58,7 @@ export function Header() {
           ) : (
             <Link
               to="/login"
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:scale-95 transition-all duration-200 shadow-sm"
             >
               登录 / 注册
             </Link>

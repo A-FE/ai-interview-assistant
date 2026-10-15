@@ -122,6 +122,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Local databases (environment-specific, not for version control)
+jobprep.db
+chroma_db/
+
 # IDEs
 .idea/
 .vscode/

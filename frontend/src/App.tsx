@@ -11,7 +11,8 @@ import { useAuth } from './hooks/useAuth'
 import { AuthProvider } from './contexts/AuthContext'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn } = useAuth()
+  const { isLoggedIn, initializing } = useAuth()
+  if (initializing) return null
   return isLoggedIn ? <>{children}</> : <Navigate to="/login" replace />
 }
 

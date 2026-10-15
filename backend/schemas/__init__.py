@@ -45,6 +45,7 @@ class JDSessionResponse(BaseModel):
 
 class StudyPlanRequest(BaseModel):
     jd_session_id: int
+    force_refresh: bool = False
 
 
 # ─── Interview ───────────────────────────────────────────────────────────────

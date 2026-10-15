@@ -51,6 +51,8 @@ export const jdAPI = {
 
 export const studyAPI = {
   planUrl: () => `${API_BASE}/api/study/plan`,
+  planBody: (jd_session_id: number, force_refresh = false) =>
+    ({ jd_session_id, force_refresh }),
 }
 
 // ─── Interview ───────────────────────────────────────────────────────────────

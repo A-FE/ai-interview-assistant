@@ -4,6 +4,7 @@ import type { User } from '../types'
 interface AuthContextValue {
   user: User | null
   isLoggedIn: boolean
+  initializing: boolean
   login: (userData: User) => void
   logout: () => void
 }
@@ -12,6 +13,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
     const token = localStorage.getItem('access_token')
@@ -24,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('access_token')
       }
     }
+    setInitializing(false)
   }, [])
 
   const login = (userData: User) => {
@@ -39,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, initializing, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -23,7 +23,6 @@ export default function Interview() {
     interviewAPI.start(jdSessionId).then(async (res) => {
       const s: InterviewSession = res.data
       setSession(s)
-      // Load opening question via SSE
       setIsStreaming(true)
       const openingMsg: Message = { role: 'assistant', content: '', isStreaming: true }
       setMessages([openingMsg])
@@ -51,7 +50,6 @@ export default function Interview() {
 
   const handleSend = async (content: string) => {
     if (!session) return
-    // Append user message
     setMessages((prev) => [...prev, { role: 'user', content }])
     setIsStreaming(true)
     const aiMsg: Message = { role: 'assistant', content: '', isStreaming: true }
@@ -68,7 +66,6 @@ export default function Interview() {
           return updated
         }),
       (_extra) => {
-        // Check if interviewer wants code editor
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last.content.includes('[CODE_QUESTION]')) {
@@ -122,29 +119,43 @@ export default function Interview() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 h-[calc(100vh-56px)] flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">模拟面试</h1>
+    <div className="max-w-6xl mx-auto px-4 py-4 h-[calc(100vh-56px)] flex flex-col gap-3">
+      {/* Top bar */}
+      <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+          <h1 className="text-base font-bold text-gray-900">模拟面试</h1>
+          {session && (
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              Session #{session.id}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowCodeEditor((v) => !v)}
-            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 transition-colors"
+            className={`px-3 py-1.5 text-xs font-medium border rounded-lg transition-all duration-200 ${
+              showCodeEditor
+                ? 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
           >
-            {showCodeEditor ? '收起代码编辑器' : '展开代码编辑器'}
+            {showCodeEditor ? '⌨️ 收起编辑器' : '⌨️ 代码编辑器'}
           </button>
           <button
             onClick={handleEnd}
             disabled={!session || ending || isStreaming}
-            className="px-4 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 disabled:opacity-40 transition-colors"
+            className="px-4 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 disabled:opacity-40 active:scale-95 transition-all duration-200"
           >
-            结束面试
+            {ending ? '生成报告中...' : '结束面试'}
           </button>
         </div>
       </div>
 
-      <div className={`flex-1 overflow-hidden grid gap-4 ${showCodeEditor ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      {/* Main content */}
+      <div className={`flex-1 overflow-hidden grid gap-3 ${showCodeEditor ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {/* Chat */}
-        <div className="bg-white rounded-2xl border flex flex-col overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
           <ChatWindow
             messages={messages}
             isStreaming={isStreaming}
@@ -155,18 +166,18 @@ export default function Interview() {
 
         {/* Code Editor */}
         {showCodeEditor && (
-          <div className="bg-white rounded-2xl border flex flex-col overflow-hidden">
-            <div className="border-b px-4 py-2 flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-700">代码编辑器</span>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+            <div className="border-b border-gray-100 px-4 py-2.5 flex items-center gap-3 bg-gray-50/50">
+              <span className="text-xs font-semibold text-gray-600">代码编辑器</span>
               <select
                 value={codeLanguage}
                 onChange={(e) => setCodeLanguage(e.target.value as 'python' | 'javascript')}
-                className="text-xs border rounded px-2 py-1"
+                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
               >
                 <option value="python">Python</option>
                 <option value="javascript">JavaScript</option>
               </select>
-              <span className="text-xs text-gray-400 ml-auto">提交后由沙箱自动运行</span>
+              <span className="text-xs text-gray-400 ml-auto">Enter 提交 · 沙箱自动运行</span>
             </div>
             <div className="flex-1">
               <Editor
@@ -180,6 +191,7 @@ export default function Interview() {
                   fontSize: 13,
                   lineNumbers: 'on',
                   scrollBeyondLastLine: false,
+                  padding: { top: 12, bottom: 12 },
                 }}
               />
             </div>
