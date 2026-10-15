@@ -86,6 +86,7 @@ export const resumeAPI = {
   },
   list: () => api.get('/api/resume/list'),
   delete: (id: number) => api.delete(`/api/resume/${id}`),
+  download: (id: number) => api.get(`/api/resume/${id}/download`, { responseType: 'blob' }),
 }
 
 // ─── SSE helper ──────────────────────────────────────────────────────────────

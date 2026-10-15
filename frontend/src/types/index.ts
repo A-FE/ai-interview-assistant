@@ -37,12 +37,30 @@ export interface InterviewReport {
   created_at: string
 }
 
+export interface WorkExperience {
+  company: string
+  title: string
+  duration: string
+  highlights: string[]
+}
+
+export interface ResumeProject {
+  name: string
+  role: string
+  tech_stack: string[]
+  description: string
+}
+
 export interface ResumeSummary {
   name: string | null
   years_exp: string | null
+  current_title: string | null
   core_skills: string[]
   education: string | null
   summary_text: string | null
+  work_experience: WorkExperience[]
+  projects: ResumeProject[]
+  certifications: string[]
 }
 
 export interface Resume {

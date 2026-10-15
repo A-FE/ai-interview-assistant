@@ -4,6 +4,7 @@ Resume router: upload PDF/Word, extract text locally, summarize with LLM.
 import io
 import json
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,12 +30,34 @@ JSON 格式：
 {
   "name": "姓名（字符串，不确定则 null）",
   "years_exp": "工作年限（字符串，如 3年，不确定则 null）",
-  "core_skills": ["技能1", "技能2", "技能3"],
+  "current_title": "当前或最近职位名称（字符串，不确定则 null）",
+  "core_skills": ["技能1", "技能2", ...],
   "education": "最高学历（字符串，如 本科·计算机，不确定则 null）",
-  "summary_text": "一句话简介（不超过50字）"
+  "summary_text": "个人综合简介，150字以内，概括背景、专长和亮点",
+  "work_experience": [
+    {
+      "company": "公司名",
+      "title": "职位",
+      "duration": "时间段，如 2021.03 - 2023.06",
+      "highlights": ["核心职责或成就1", "核心职责或成就2"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "项目名称",
+      "role": "担任角色",
+      "tech_stack": ["技术1", "技术2"],
+      "description": "项目简介，100字以内"
+    }
+  ],
+  "certifications": ["证书1", "证书2"]
 }
 
-只输出 JSON，不要 markdown 代码块，不要任何解释。"""
+注意：
+- work_experience 按时间倒序，最多提取 5 条
+- projects 最多提取 4 条
+- certifications 没有则返回空数组
+- 只输出 JSON，不要 markdown 代码块，不要任何解释"""
 
 
 def _extract_text_pdf(data: bytes) -> str:
@@ -61,7 +84,7 @@ async def _summarize_resume(raw_text: str) -> dict:
     llm = get_llm(streaming=False)
     messages = [
         SystemMessage(content=SUMMARY_SYSTEM),
-        HumanMessage(content=f"## 简历文本\n{raw_text[:3000]}"),
+        HumanMessage(content=f"## 简历文本\n{raw_text}"),
     ]
     try:
         resp = await llm.ainvoke(messages)
@@ -112,9 +135,17 @@ async def upload_resume(
 
     summary_dict = await _summarize_resume(raw_text)
 
+    # Determine stored MIME type for download
+    stored_ct = "application/pdf" if is_pdf else (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if filename.lower().endswith(".docx") else "application/msword"
+    )
+
     resume = Resume(
         user_id=current_user.id,
         filename=filename,
+        file_data=data,
+        content_type=stored_ct,
         raw_text=raw_text,
         summary=json.dumps(summary_dict, ensure_ascii=False),
     )
@@ -135,6 +166,33 @@ async def list_resumes(
         .order_by(Resume.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.get("/{resume_id}/download")
+async def download_resume(
+    resume_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download the original uploaded resume file."""
+    result = await db.execute(
+        select(Resume).where(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id,
+        )
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+    if not resume.file_data:
+        raise HTTPException(status_code=404, detail="原始文件不存在（该简历在功能上线前上传）")
+
+    ct = resume.content_type or "application/octet-stream"
+    return StreamingResponse(
+        io.BytesIO(resume.file_data),
+        media_type=ct,
+        headers={"Content-Disposition": f'attachment; filename="{resume.filename}"'},
+    )
 
 
 @router.delete("/{resume_id}", status_code=204)
