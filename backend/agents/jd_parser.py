@@ -1,7 +1,9 @@
 """
 JD Parser Agent: analyzes job description and computes user match score.
 Streams output token by token via an async generator.
+After streaming completes, extracts a structured summary via a second LLM call.
 """
+import json
 from typing import AsyncGenerator, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agents.state import get_llm
@@ -28,6 +30,19 @@ SYSTEM_PROMPT = """你是一位资深技术招聘顾问，擅长解析前端/后
 
 保持分析客观、具体，不做模糊描述。"""
 
+SUMMARY_SYSTEM = """你是一个信息提取助手。从 JD 文本和分析结果中提取关键信息，以 JSON 格式返回，不要有任何其他内容。
+
+JSON 格式：
+{
+  "title": "岗位名称（字符串）",
+  "company": "公司名称（字符串，不确定则 null）",
+  "core_stack": ["技术1", "技术2", "技术3"],
+  "level": "经验要求（如 3-5年，不确定则 null）",
+  "match_score": 匹配分数整数0-100（无简历则 null）
+}
+
+只输出 JSON，不要 markdown 代码块，不要任何解释。"""
+
 
 async def run_jd_parser(
     jd_text: str,
@@ -53,3 +68,29 @@ async def run_jd_parser(
     async for chunk in llm.astream(messages):
         if chunk.content:
             yield chunk.content
+
+
+async def extract_jd_summary(jd_text: str, analysis_result: str, resume_text: Optional[str] = None) -> dict:
+    """Extract structured summary from JD + analysis. Returns a dict."""
+    llm = get_llm(streaming=False)
+
+    user_content = f"## JD原文\n{jd_text[:1000]}\n\n## 分析结果（摘录）\n{analysis_result[:1500]}"
+    if resume_text:
+        user_content += f"\n\n（用户有提交简历）"
+
+    messages = [
+        SystemMessage(content=SUMMARY_SYSTEM),
+        HumanMessage(content=user_content),
+    ]
+
+    try:
+        resp = await llm.ainvoke(messages)
+        raw = resp.content.strip()
+        # Strip markdown code fences if model wraps them
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return json.loads(raw)
+    except Exception:
+        return {}

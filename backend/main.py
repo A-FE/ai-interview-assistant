@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="JobPrep Agent API",
+    title="AI 面试助手 API",
     description="AI-powered technical interview preparation platform",
     version="1.0.0",
     lifespan=lifespan,

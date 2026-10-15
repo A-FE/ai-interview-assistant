@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { jdAPI, postSSE } from '../api'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
 
 export default function JDAnalysis() {
   const [jdText, setJdText] = useState('')
-  const [resumeText, setResumeText] = useState('')
   const [result, setResult] = useState('')
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrError, setOcrError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
   const handleAnalyze = async () => {
@@ -20,7 +22,7 @@ export default function JDAnalysis() {
     try {
       await postSSE(
         jdAPI.analyzeUrl(),
-        { jd_text: jdText, resume_text: resumeText || undefined },
+        { jd_text: jdText },
         (chunk) => setResult((prev) => prev + chunk),
         (extra) => {
           if (extra?.session_id) setSessionId(extra.session_id as number)
@@ -31,68 +33,149 @@ export default function JDAnalysis() {
     }
   }
 
-  const textareaClass = "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 resize-none placeholder:text-gray-400"
+  const handleImageUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setOcrError('请上传图片文件（PNG / JPG / WebP）')
+      return
+    }
+    setOcrError('')
+    setOcrLoading(true)
+    try {
+      const base64 = await fileToBase64(file)
+      const res = await jdAPI.ocr(base64, file.type)
+      const text: string = res.data.text || ''
+      if (!text.trim()) {
+        setOcrError('未能从图片中提取到文字，请尝试更清晰的截图')
+        return
+      }
+      setJdText(text)
+    } catch (e: any) {
+      setOcrError(e?.response?.data?.detail || 'OCR 识别失败，请稍后重试')
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleImageUpload(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleImageUpload(file)
+  }
+
+  const textareaClass =
+    'w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 resize-none placeholder:text-gray-400'
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Page header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">JD 智能解析</h1>
-        <p className="text-sm text-gray-400 mt-1">粘贴目标岗位 JD，AI 自动提取技术要求并评估匹配度</p>
+        <p className="text-sm text-gray-400 mt-1">粘贴或上传截图，AI 自动提取技术要求并评估匹配度</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: input */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-            <div>
-              <label className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                目标岗位 JD
-                <span className="text-red-400 font-normal normal-case">必填</span>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                目标岗位 JD <span className="text-red-400 normal-case font-normal">必填</span>
               </label>
+              {/* Upload screenshot button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={ocrLoading}
+                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-50"
+              >
+                {ocrLoading ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
+                    识别中...
+                  </>
+                ) : (
+                  <>
+                    <span>🖼️</span> 上传截图
+                  </>
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+            </div>
+
+            {/* Drop zone + textarea */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="relative"
+            >
               <textarea
                 className={textareaClass}
-                style={{ height: '180px' }}
-                placeholder="粘贴职位描述（JD）到此处..."
+                style={{ height: '260px' }}
+                placeholder="粘贴职位描述（JD）到此处，或将截图拖拽到这里..."
                 value={jdText}
                 onChange={(e) => setJdText(e.target.value)}
               />
+              {ocrLoading && (
+                <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-sm text-indigo-600">
+                    <span className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
+                    正在识别截图文字...
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                个人简历 <span className="normal-case font-normal text-gray-400">可选，用于匹配度分析</span>
-              </label>
-              <textarea
-                className={textareaClass}
-                style={{ height: '130px' }}
-                placeholder="粘贴你的简历文本..."
-                value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={handleAnalyze}
-              disabled={loading || !jdText.trim()}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition-all duration-200 shadow-sm shadow-indigo-100 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  AI 分析中...
-                </>
-              ) : '🔍 开始解析'}
-            </button>
+
+            {ocrError && (
+              <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+                <span>⚠️</span> {ocrError}
+              </p>
+            )}
+            {jdText && !ocrLoading && (
+              <p className="mt-1.5 text-xs text-gray-400">{jdText.length} 字</p>
+            )}
           </div>
+
+          <button
+            onClick={handleAnalyze}
+            disabled={loading || !jdText.trim()}
+            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition-all duration-200 shadow-sm shadow-indigo-100 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                AI 分析中...
+              </>
+            ) : '🔍 开始解析'}
+          </button>
         </div>
 
         {/* Right: result */}
-        <div className={`rounded-2xl border transition-all duration-300 ${result ? 'bg-white border-gray-100 shadow-sm' : 'bg-gray-50 border-gray-100 border-dashed'} p-5 min-h-64`}>
+        <div
+          className={`rounded-2xl border transition-all duration-300 ${
+            result
+              ? 'bg-white border-gray-100 shadow-sm'
+              : 'bg-gray-50 border-gray-100 border-dashed'
+          } p-5 min-h-64`}
+        >
           {result ? (
             <>
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full" />
                 <span className="text-xs font-medium text-gray-500">分析结果</span>
-                {loading && <span className="text-xs text-indigo-500 ml-auto animate-pulse">生成中...</span>}
+                {loading && (
+                  <span className="text-xs text-indigo-500 ml-auto animate-pulse">生成中...</span>
+                )}
               </div>
               <MarkdownRenderer content={result} />
               {!loading && sessionId && (
@@ -115,11 +198,28 @@ export default function JDAnalysis() {
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-12">
               <div className="text-4xl opacity-30">🤖</div>
-              <p className="text-sm">{loading ? '正在分析，请稍候...' : '分析结果将显示在这里'}</p>
+              <p className="text-sm">
+                {loading ? '正在分析，请稍候...' : '分析结果将显示在这里'}
+              </p>
             </div>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // Strip the "data:<mime>;base64," prefix
+      resolve(result.split(',')[1])
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }

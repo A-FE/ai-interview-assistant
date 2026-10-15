@@ -35,7 +35,7 @@ export function Header() {
             AI
           </div>
           <span className="font-bold text-base text-gray-900 tracking-tight">
-            AI 面试助手
+            AI 面试<span className="text-indigo-600">助手</span>
           </span>
         </Link>
 
@@ -43,7 +43,8 @@ export function Header() {
           {user ? (
             <>
               {navLink('/jd', 'JD 分析')}
-              {navLink('/user', '用户中心')}
+              {navLink('/resume', '简历')}
+              {navLink('/records', '分析记录')}
               <div className="w-px h-4 bg-gray-200 mx-2" />
               <span className="text-xs text-gray-400 px-1">
                 {user.is_guest ? '🙋 游客' : `👤 ${user.username}`}

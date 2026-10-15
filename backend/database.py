@@ -20,6 +20,6 @@ async def get_db():
 
 async def init_db():
     """Create all tables on startup."""
-    from backend.models import user, jd_session, interview_session, report  # noqa: F401
+    from backend.models import user, jd_session, interview_session, report, resume  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

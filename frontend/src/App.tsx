@@ -6,7 +6,8 @@ import JDAnalysis from './pages/JDAnalysis'
 import StudyPlan from './pages/StudyPlan'
 import Interview from './pages/Interview'
 import Report from './pages/Report'
-import UserCenter from './pages/UserCenter'
+import Records from './pages/Records'
+import ResumePage from './pages/ResumePage'
 import { useAuth } from './hooks/useAuth'
 import { AuthProvider } from './contexts/AuthContext'
 
@@ -28,7 +29,10 @@ function App() {
           <Route path="/study" element={<RequireAuth><StudyPlan /></RequireAuth>} />
           <Route path="/interview" element={<RequireAuth><Interview /></RequireAuth>} />
           <Route path="/report/:id" element={<RequireAuth><Report /></RequireAuth>} />
-          <Route path="/user" element={<RequireAuth><UserCenter /></RequireAuth>} />
+          <Route path="/records" element={<RequireAuth><Records /></RequireAuth>} />
+          <Route path="/resume" element={<RequireAuth><ResumePage /></RequireAuth>} />
+          {/* legacy redirect */}
+          <Route path="/user" element={<Navigate to="/records" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

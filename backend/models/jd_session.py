@@ -16,4 +16,6 @@ class JDSession(Base):
     analysis_result: Mapped[str] = mapped_column(Text, nullable=True)
     # Cached study plan (regenerated after each interview)
     study_plan_cache: Mapped[str] = mapped_column(Text, nullable=True)
+    # Structured summary extracted at analysis time (JSON)
+    jd_summary: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

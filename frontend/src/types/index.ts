@@ -5,10 +5,19 @@ export interface User {
   access_token: string
 }
 
+export interface JDSummary {
+  title: string | null
+  company: string | null
+  core_stack: string[]
+  level: string | null
+  match_score: number | null
+}
+
 export interface JDSession {
   id: number
   jd_text: string
   analysis_result: string | null
+  jd_summary: string | null  // JSON string of JDSummary
   created_at: string
 }
 
@@ -25,5 +34,20 @@ export interface InterviewReport {
   overall_score: number | null
   report_json: string
   weak_points_summary: string | null
+  created_at: string
+}
+
+export interface ResumeSummary {
+  name: string | null
+  years_exp: string | null
+  core_skills: string[]
+  education: string | null
+  summary_text: string | null
+}
+
+export interface Resume {
+  id: number
+  filename: string
+  summary: string | null  // JSON string of ResumeSummary
   created_at: string
 }

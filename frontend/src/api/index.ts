@@ -43,8 +43,9 @@ export const authAPI = {
 export const jdAPI = {
   listSessions: () => api.get('/api/jd/sessions'),
   getSession: (id: number) => api.get(`/api/jd/sessions/${id}`),
-  // SSE endpoint URL (used with EventSource)
   analyzeUrl: () => `${API_BASE}/api/jd/analyze`,
+  ocr: (image_base64: string, mime_type: string) =>
+    api.post('/api/jd/ocr', { image_base64, mime_type }),
 }
 
 // ─── Study ───────────────────────────────────────────────────────────────────
@@ -76,7 +77,15 @@ export const reportAPI = {
 // ─── Resume ──────────────────────────────────────────────────────────────────
 
 export const resumeAPI = {
-  optimizeUrl: () => `${API_BASE}/api/resume/optimize`,
+  upload: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/api/resume/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  list: () => api.get('/api/resume/list'),
+  delete: (id: number) => api.delete(`/api/resume/${id}`),
 }
 
 // ─── SSE helper ──────────────────────────────────────────────────────────────
