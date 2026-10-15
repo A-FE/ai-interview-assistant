@@ -44,8 +44,8 @@ export function Header() {
             <>
               {navLink('/jd', 'JD 分析')}
               {navLink('/resume', '简历')}
-              {navLink('/kb', '知识库')}
               {navLink('/records', '分析记录')}
+              {!user.is_guest && navLink('/kb', '知识库')}
               <div className="w-px h-4 bg-gray-200 mx-2" />
               <span className="text-xs text-gray-400 px-1">
                 {user.is_guest ? '🙋 游客' : `👤 ${user.username}`}

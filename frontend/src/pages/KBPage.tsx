@@ -3,6 +3,20 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ragAPI } from '../api'
 
+const SOURCE_LABELS: Record<string, string> = {
+  algorithms:       '算法与数据结构',
+  database:         '数据库',
+  http_network:     'HTTP 与网络',
+  javascript_core:  'JavaScript 核心',
+  python_core:      'Python 核心',
+  react_frontend:   'React 前端',
+  system_design:    '系统设计',
+}
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source
+}
+
 interface DocSummary {
   source: string
   chunk_count: number
@@ -16,7 +30,7 @@ interface Chunk {
 }
 
 function ChunkItem({ chunk }: { chunk: Chunk }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const byteSize = new TextEncoder().encode(chunk.text).length
   const sizeLabel = byteSize >= 1024 ? `${(byteSize / 1024).toFixed(1)} KB` : `${byteSize} B`
 
@@ -65,7 +79,7 @@ function DocPanel({ source, onClose }: { source: string; onClose: () => void }) 
       {/* Panel header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">{source}</h2>
+          <h2 className="text-base font-semibold text-gray-900">{sourceLabel(source)}</h2>
           {!loading && !error && (
             <p className="text-xs text-gray-400 mt-0.5">{chunks.length} 个文档块</p>
           )}
@@ -105,7 +119,10 @@ export default function KBPage() {
 
   useEffect(() => {
     ragAPI.listDocs()
-      .then((res) => setDocs(res.data))
+      .then((res) => {
+        setDocs(res.data)
+        if (res.data.length > 0) setSelected(res.data[0].source)
+      })
       .catch(() => setError('加载知识库失败，请确认后端已启动且知识库已初始化'))
       .finally(() => setLoading(false))
   }, [])
@@ -149,7 +166,7 @@ export default function KBPage() {
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="text-base shrink-0">📄</span>
-                        <span className="text-sm font-medium truncate">{doc.source}</span>
+                        <span className="text-sm font-medium truncate">{sourceLabel(doc.source)}</span>
                       </div>
                       <span className={`text-xs px-1.5 py-0.5 rounded-md shrink-0 ${
                         selected === doc.source
