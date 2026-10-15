@@ -31,6 +31,14 @@ class JDAnalyzeRequest(BaseModel):
     resume_text: Optional[str] = None
 
 
+class JDCreateRequest(BaseModel):
+    jd_text: str
+
+
+class JDDeepAnalyzeRequest(BaseModel):
+    resume_id: int
+
+
 class JDSummary(BaseModel):
     """Structured summary extracted from JD at analysis time."""
     title: Optional[str] = None       # 岗位名称

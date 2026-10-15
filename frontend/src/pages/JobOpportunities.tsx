@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { jdAPI, postSSE } from '../api'
-import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { jdAPI } from '../api'
 import type { JDSession, JDSummary } from '../types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -30,11 +29,11 @@ function AddJDModal({
   onCreated: (session: JDSession) => void
 }) {
   const [jdText, setJdText] = useState('')
-  const [analyzing, setAnalyzing] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrError, setOcrError] = useState('')
-  const [streamResult, setStreamResult] = useState('')
-  const [dupNotice, setDupNotice] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const [dupId, setDupId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
@@ -67,52 +66,26 @@ function AddJDModal({
     }
   }
 
-  const handleAnalyze = async () => {
+  const handleSave = async () => {
     if (!jdText.trim()) return
-    setAnalyzing(true)
-    setStreamResult('')
-    setDupNotice(null)
-    let createdSession: JDSession | null = null
-
+    setSaving(true)
+    setError('')
+    setDupId(null)
     try {
-      await postSSE(
-        jdAPI.analyzeUrl(),
-        { jd_text: jdText },
-        (chunk) => setStreamResult((prev) => prev + chunk),
-        (extra) => {
-          if (extra?.type === 'duplicate') {
-            setDupNotice(extra.session_id as number)
-          }
-          if (extra?.type === 'done' && extra?.session_id) {
-            const summary = extra.jd_summary as any
-            createdSession = {
-              id: extra.session_id as number,
-              jd_text: jdText,
-              analysis_result: null,
-              jd_summary: JSON.stringify(summary),
-              title: summary?.title ?? null,
-              company: summary?.company ?? null,
-              created_at: new Date().toISOString(),
-            }
-          }
-        },
-      )
-    } finally {
-      setAnalyzing(false)
-      if (createdSession) {
-        onCreated(createdSession)
-        onClose()
+      const res = await jdAPI.createSession(jdText)
+      onCreated(res.data)
+      onClose()
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail
+      if (e?.response?.status === 409 && typeof detail === 'object' && detail?.type === 'duplicate') {
+        setDupId(detail.session_id as number)
+      } else {
+        setError(detail || '保存失败，请稍后重试')
       }
+    } finally {
+      setSaving(false)
     }
   }
-
-  // Auto-analyze once OCR text lands
-  useEffect(() => {
-    if (jdText && !ocrLoading && !analyzing) {
-      handleAnalyze()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jdText, ocrLoading])
 
   return (
     <div
@@ -130,7 +103,7 @@ function AddJDModal({
             <p className="text-xs text-gray-400">粘贴 JD 文字，或上传招聘截图</p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={ocrLoading || analyzing}
+              disabled={ocrLoading || saving}
               className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-50"
             >
               {ocrLoading
@@ -145,13 +118,18 @@ function AddJDModal({
             <p className="text-xs text-red-500 flex items-center gap-1"><span>⚠️</span>{ocrError}</p>
           )}
 
-          {dupNotice && (
+          {dupId && (
             <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
               <span>⚠️</span>
               <span>检测到相似度 &gt;90% 的重复 JD，已跳过创建。</span>
-              <button onClick={() => { onClose(); navigate(`/jd/${dupNotice}`) }} className="underline font-medium hover:text-amber-900 whitespace-nowrap">查看已有记录</button>
+              <button onClick={() => { onClose(); navigate(`/jd/${dupId}`) }} className="underline font-medium hover:text-amber-900 whitespace-nowrap">查看已有记录</button>
             </div>
           )}
+
+          {error && (
+            <p className="text-xs text-red-500 flex items-center gap-1"><span>⚠️</span>{error}</p>
+          )}
+
           <div
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleImageUpload(f) }}
             onDragOver={(e) => e.preventDefault()}
@@ -162,7 +140,7 @@ function AddJDModal({
               className="w-full h-48 border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all resize-none placeholder:text-gray-400"
               placeholder="粘贴职位描述（JD）到此处，或将截图拖拽到这里..."
               value={jdText}
-              onChange={(e) => { setJdText(e.target.value); setDupNotice(null) }}
+              onChange={(e) => { setJdText(e.target.value); setDupId(null); setError('') }}
             />
             {ocrLoading && (
               <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
@@ -175,31 +153,20 @@ function AddJDModal({
           </div>
 
           {jdText && !ocrLoading && (
-            <p className="text-xs text-gray-400">{jdText.length} 字</p>
-          )}
-
-          {streamResult && (
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 max-h-48 overflow-y-auto">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full" />
-                <span className="text-xs font-medium text-gray-500">分析结果</span>
-                {analyzing && <span className="text-xs text-indigo-400 ml-auto animate-pulse">生成中...</span>}
-              </div>
-              <MarkdownRenderer content={streamResult} />
-            </div>
+            <p className="text-xs text-gray-400">{jdText.length} 字 · 添加后可在详情页进行深度 AI 分析</p>
           )}
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 active:scale-[0.98] transition-all">取消</button>
           <button
-            onClick={handleAnalyze}
-            disabled={analyzing || ocrLoading || !jdText.trim()}
+            onClick={handleSave}
+            disabled={saving || ocrLoading || !jdText.trim()}
             className="flex-2 flex-grow py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-sm shadow-indigo-100"
           >
-            {analyzing
-              ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />AI 解析中...</>
-              : '🔍 开始解析'}
+            {saving
+              ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />保存中...</>
+              : '＋ 添加 JD'}
           </button>
         </div>
       </div>

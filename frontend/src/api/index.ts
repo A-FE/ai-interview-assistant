@@ -44,6 +44,11 @@ export const jdAPI = {
   listSessions: () => api.get('/api/jd/sessions'),
   getSession: (id: number) => api.get(`/api/jd/sessions/${id}`),
   deleteSession: (id: number) => api.delete(`/api/jd/sessions/${id}`),
+  // Create session without AI analysis (title/company extracted only)
+  createSession: (jd_text: string) => api.post('/api/jd/sessions/create', { jd_text }),
+  // SSE URL for deep analysis (requires resume_id in POST body)
+  analyzeSessionUrl: (session_id: number) => `${API_BASE}/api/jd/sessions/${session_id}/analyze`,
+  /** @deprecated Use createSession + analyzeSessionUrl instead */
   analyzeUrl: () => `${API_BASE}/api/jd/analyze`,
   ocr: (image_base64: string, mime_type: string) =>
     api.post('/api/jd/ocr', { image_base64, mime_type }),

@@ -9,26 +9,30 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agents.state import get_llm
 from backend.tools.rag_tool import rag_search
 
-SYSTEM_PROMPT = """你是一位资深技术招聘顾问，擅长解析前端/后端/测试开发岗位的JD。
+SYSTEM_PROMPT = """你是一位资深技术招聘顾问，擅长解析前端/后端/测试开发岗位的JD，帮助求职者找到自身与岗位的差距。
 
-请对提供的JD进行结构化分析，输出以下内容（使用Markdown格式）：
+请对提供的JD和用户简历进行结构化分析，**以差距为核心**，输出以下内容（使用Markdown格式）：
 
-## 岗位技术栈清单
-列出所有技术要求，标注【必选】或【加分项】
+## ⚠️ 能力差距清单（重点）
+**这是最重要的部分。** 详细列出用户目前不满足或需要补强的每一项要求：
+- 缺失的技术技能（每条注明优先级：高/中/低）
+- 项目经验上的空缺（JD 要求有但简历中没有的方向）
+- 硬性门槛上的差距（年限、学历等）
+- 每条差距后给出 1-2 句具体的提升建议
+
+## 面试高频考察点
+根据 JD 预测面试官最可能考察的技术点（按优先级排序），重点标注用户薄弱的考点
 
 ## 岗位硬性门槛
-工作年限、学历、业务背景等硬性要求
+工作年限、学历、业务背景等硬性要求（简洁列出）
 
-## 用户匹配度分析
-（如提供了简历）打分0-100，并说明理由
+## ✅ 已符合的要求（简述）
+一笔带过用户简历中已匹配的技能和经验，无需展开说明
 
-## 能力差距清单
-列出用户需要补强的知识点和项目经验
+## 匹配度评分
+给出 0-100 分及一句话总结理由
 
-## 面试考察重点
-根据JD预测面试官最可能考察的技术点（优先级排序）
-
-保持分析客观、具体，不做模糊描述。"""
+保持分析客观、具体，不做模糊描述。差距部分务必具体到知识点，不要泛泛而谈。"""
 
 SUMMARY_SYSTEM = """你是一个信息提取助手。从 JD 文本和分析结果中提取关键信息，以 JSON 格式返回，不要有任何其他内容。
 
@@ -68,7 +72,8 @@ async def run_jd_parser(
         HumanMessage(content=user_content),
     ]
 
-    async for chunk in llm.astream(messages):
+    # Disable Qwen3 extended thinking — without this the model ignores resume content
+    async for chunk in llm.astream(messages, extra_body={"enable_thinking": False}):
         if chunk.content:
             yield chunk.content
 
