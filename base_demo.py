@@ -18,12 +18,25 @@ def calculate(expression: str) -> str:
 def get_current_time() -> str:
     """获取当前时间"""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
+# 假设你已经有了一个 RAG 检索函数（你之前学过的）
+def rag_search(query: str) -> str:
+    """在企业知识库中检索相关文档"""
+    # 这里换成你自己的 RAG 逻辑
+    # 1. query embedding
+    # 2. 向量检索 Top-K
+    # 3. 返回拼接的相关片段
+    fake_docs = """
+    公司年假政策：入职满1年享5天年假，满10年享10天。
+    报销规定：差旅报销需在出差后15个工作日内提交。
+    """
+    return fake_docs
 
 # 工具注册
 tools = {
     "calculate": calculate, 
-    "get_current_time": get_current_time
+    "get_current_time": get_current_time,
+    "rag_search": rag_search,
 }
 
 # 工具的 JSON Schema (告诉模型有哪些工具、怎么调用)
@@ -52,6 +65,23 @@ tools_schema = [
             "name": "get_current_time",
             "description": "获取当前时间",
             "parameters": {}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rag_search",
+            "description": "在企业知识库中检索相关文档",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "要检索的查询"
+                    }
+                },
+                "required": ["query"]
+            }
         }
     }
 ]
@@ -104,7 +134,7 @@ def run_agent(user_message: str, max_steps: int = 5):
 
 # ================ 3. 运行示例 ================
 if __name__ == "__main__":
-    user_message = "计算 12345 * 6789 并获取当前时间"
+    user_message = "我入职 3 年了，有几天年假？报销流程是怎么样的？"
     result = run_agent(user_message)
     print(result)
                 
