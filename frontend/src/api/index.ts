@@ -1,0 +1,120 @@
+import axios from 'axios'
+
+const API_BASE = 'http://localhost:8000'
+
+export const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 30000,
+})
+
+// Attach JWT token from localStorage to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Auto-logout on 401
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('access_token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  },
+)
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export const authAPI = {
+  register: (username: string, password: string, email?: string) =>
+    api.post('/api/auth/register', { username, password, email }),
+  login: (username: string, password: string) =>
+    api.post('/api/auth/login', { username, password }),
+  guest: () => api.post('/api/auth/guest'),
+}
+
+// ─── JD ──────────────────────────────────────────────────────────────────────
+
+export const jdAPI = {
+  listSessions: () => api.get('/api/jd/sessions'),
+  getSession: (id: number) => api.get(`/api/jd/sessions/${id}`),
+  // SSE endpoint URL (used with EventSource)
+  analyzeUrl: () => `${API_BASE}/api/jd/analyze`,
+}
+
+// ─── Study ───────────────────────────────────────────────────────────────────
+
+export const studyAPI = {
+  planUrl: () => `${API_BASE}/api/study/plan`,
+}
+
+// ─── Interview ───────────────────────────────────────────────────────────────
+
+export const interviewAPI = {
+  start: (jd_session_id: number) =>
+    api.post('/api/interview/start', { jd_session_id }),
+  openingUrl: (id: number) => `${API_BASE}/api/interview/${id}/opening`,
+  answerUrl: (id: number) => `${API_BASE}/api/interview/${id}/answer`,
+  endUrl: (id: number) => `${API_BASE}/api/interview/${id}/end`,
+}
+
+// ─── Report ──────────────────────────────────────────────────────────────────
+
+export const reportAPI = {
+  list: () => api.get('/api/report/list'),
+  get: (id: number) => api.get(`/api/report/${id}`),
+  byJD: (jdSessionId: number) => api.get(`/api/report/by-jd/${jdSessionId}`),
+}
+
+// ─── Resume ──────────────────────────────────────────────────────────────────
+
+export const resumeAPI = {
+  optimizeUrl: () => `${API_BASE}/api/resume/optimize`,
+}
+
+// ─── SSE helper ──────────────────────────────────────────────────────────────
+
+/** POST-based SSE: fetch with ReadableStream since EventSource only supports GET */
+export async function postSSE(
+  url: string,
+  body: object,
+  onChunk: (text: string) => void,
+  onDone?: (extra?: Record<string, unknown>) => void,
+): Promise<void> {
+  const token = localStorage.getItem('access_token')
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.body) throw new Error('No response body')
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      try {
+        const payload = JSON.parse(line.slice(6))
+        if (payload.type === 'chunk') onChunk(payload.content)
+        if (payload.type === 'done') onDone?.(payload)
+      } catch {
+        // skip malformed lines
+      }
+    }
+  }
+}
