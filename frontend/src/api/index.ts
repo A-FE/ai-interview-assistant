@@ -110,7 +110,12 @@ export const resumeAPI = {
   download: (id: number) => api.get(`/api/resume/${id}/download`, { responseType: 'blob' }),
 }
 
-// ─── SSE helper ──────────────────────────────────────────────────────────────
+// ─── RAG Knowledge Base ──────────────────────────────────────────────────────
+
+export const ragAPI = {
+  listDocs: () => api.get('/api/rag/docs'),
+  getChunks: (source: string) => api.get(`/api/rag/docs/${encodeURIComponent(source)}/chunks`),
+}
 
 /** POST-based SSE: fetch with ReadableStream since EventSource only supports GET */
 export async function postSSE(

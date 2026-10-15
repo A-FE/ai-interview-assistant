@@ -5,11 +5,13 @@ Usage: cd <project_root> && python -m backend.rag.init_kb
 """
 import os
 import sys
+import time
 from pathlib import Path
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
+from langchain_core.embeddings import Embeddings
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -19,16 +21,41 @@ from backend.config import settings
 
 DATA_DIR = Path(__file__).parent / "data"
 
+# DashScope embedding API only allows ≤10 texts per request
+_EMBED_BATCH_SIZE = 10
+
+
+class BatchedEmbeddings(Embeddings):
+    """Wrapper that splits embed_documents into batches of ≤10."""
+
+    def __init__(self, base: OpenAIEmbeddings, batch_size: int = _EMBED_BATCH_SIZE):
+        self._base = base
+        self._batch_size = batch_size
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        results: list[list[float]] = []
+        for i in range(0, len(texts), self._batch_size):
+            batch = texts[i: i + self._batch_size]
+            results.extend(self._base.embed_documents(batch))
+            # Brief pause to avoid rate-limit bursts
+            if i + self._batch_size < len(texts):
+                time.sleep(0.2)
+        return results
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._base.embed_query(text)
+
 
 def init_knowledge_base():
     print("🔄 初始化面试知识库...")
 
-    embeddings = OpenAIEmbeddings(
+    base_embeddings = OpenAIEmbeddings(
         model="text-embedding-v3",
         api_key=settings.dashscope_api_key,
         base_url=settings.llm_base_url,
-        check_embedding_ctx_length=False,  # 禁用 token 化，直接传字符串
+        check_embedding_ctx_length=False,
     )
+    embeddings = BatchedEmbeddings(base_embeddings)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
@@ -51,13 +78,14 @@ def init_knowledge_base():
         docs.extend(chunks)
         print(f"  ✅ {md_file.name}: {len(chunks)} chunks")
 
+    print(f"\n📤 开始写入向量库（共 {len(docs)} 块，每批 {_EMBED_BATCH_SIZE} 条）...")
     vectorstore = Chroma.from_documents(
         documents=docs,
         embedding=embeddings,
         collection_name=settings.chroma_collection,
         persist_directory=settings.chroma_persist_dir,
     )
-    print(f"\n✅ 知识库初始化完成，共 {len(docs)} 个文本块已写入 {settings.chroma_persist_dir}")
+    print(f"✅ 知识库初始化完成，共 {len(docs)} 个文本块已写入 {settings.chroma_persist_dir}")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db
-from backend.routers import auth, jd, study, interview, report, resume
+from backend.routers import auth, jd, study, interview, report, resume, rag
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +40,7 @@ app.include_router(study.router)
 app.include_router(interview.router)
 app.include_router(report.router)
 app.include_router(resume.router)
+app.include_router(rag.router)
 
 
 @app.get("/health")

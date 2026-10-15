@@ -8,6 +8,7 @@ import Interview from './pages/Interview'
 import Report from './pages/Report'
 import Records from './pages/Records'
 import ResumePage from './pages/ResumePage'
+import KBPage from './pages/KBPage'
 import { useAuth } from './hooks/useAuth'
 import { AuthProvider } from './contexts/AuthContext'
 
@@ -31,6 +32,7 @@ function App() {
           <Route path="/report/:id" element={<RequireAuth><Report /></RequireAuth>} />
           <Route path="/records" element={<RequireAuth><Records /></RequireAuth>} />
           <Route path="/resume" element={<RequireAuth><ResumePage /></RequireAuth>} />
+          <Route path="/kb" element={<RequireAuth><KBPage /></RequireAuth>} />
           {/* legacy redirect */}
           <Route path="/user" element={<Navigate to="/records" replace />} />
         </Routes>
