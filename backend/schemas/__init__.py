@@ -110,6 +110,7 @@ class ResumeResponse(BaseModel):
     id: int
     filename: str
     summary: Optional[str] = None   # JSON string
+    status: str = "done"            # "parsing" | "done" | "failed"
     created_at: datetime
 
     class Config:

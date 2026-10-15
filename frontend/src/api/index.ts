@@ -80,8 +80,29 @@ export const resumeAPI = {
   upload: (file: File) => {
     const form = new FormData()
     form.append('file', file)
+    console.log('[resume] 开始上传:', file.name, `${(file.size / 1024).toFixed(1)} KB`, file.type)
+    const t0 = performance.now()
     return api.post('/api/resume/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000, // 120s — LLM 摘要提取可能耗时较长
+      onUploadProgress: (e) => {
+        if (e.total) {
+          const pct = Math.round((e.loaded / e.total) * 100)
+          console.log(`[resume] 上传进度: ${pct}% (${e.loaded}/${e.total} bytes)`)
+        }
+      },
+    }).then((res) => {
+      console.log(`[resume] 上传成功，总耗时 ${((performance.now() - t0) / 1000).toFixed(2)}s`, res.data)
+      return res
+    }).catch((err) => {
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(2)
+      console.error(`[resume] 上传失败，耗时 ${elapsed}s`, {
+        code: err.code,
+        message: err.message,
+        status: err.response?.status,
+        detail: err.response?.data?.detail,
+      })
+      throw err
     })
   },
   list: () => api.get('/api/resume/list'),

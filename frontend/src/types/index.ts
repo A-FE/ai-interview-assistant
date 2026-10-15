@@ -67,5 +67,6 @@ export interface Resume {
   id: number
   filename: string
   summary: string | null  // JSON string of ResumeSummary
+  status: 'parsing' | 'done' | 'failed'
   created_at: string
 }

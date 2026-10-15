@@ -37,6 +37,16 @@ if [ ! -d "$ROOT/chroma_db" ]; then
   "$VENV/python" -m backend.rag.init_kb
 fi
 
+# Kill any process already using required ports
+for PORT in 8000 5173; do
+  PIDS=$(lsof -ti tcp:$PORT 2>/dev/null || true)
+  if [ -n "$PIDS" ]; then
+    echo "⚠️  端口 $PORT 已被占用，正在释放..."
+    echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    sleep 0.5
+  fi
+done
+
 # Start backend
 echo "🚀 启动后端 (http://localhost:8000) ..."
 cd "$ROOT"

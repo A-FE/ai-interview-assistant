@@ -242,10 +242,37 @@ export default function ResumePage() {
   const [dragOver, setDragOver] = useState(false)
   const [selected, setSelected] = useState<Resume | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     loadResumes()
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   }, [])
+
+  // Start polling when any resume is still parsing
+  useEffect(() => {
+    const hasParsing = resumes.some((r) => r.status === 'parsing')
+    if (hasParsing && !pollingRef.current) {
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await resumeAPI.list()
+          setResumes(res.data)
+          // Update selected modal if open
+          setSelected((prev) => prev ? (res.data.find((r: Resume) => r.id === prev.id) ?? prev) : null)
+          const stillParsing = (res.data as Resume[]).some((r) => r.status === 'parsing')
+          if (!stillParsing && pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
+        } catch {
+          // ignore transient poll errors
+        }
+      }, 3000)
+    } else if (!hasParsing && pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }, [resumes])
 
   const loadResumes = () => {
     setLoading(true)
@@ -266,6 +293,7 @@ export default function ResumePage() {
     setUploading(true)
     try {
       const res = await resumeAPI.upload(file)
+      // Show in list immediately; status="parsing" triggers poll
       setResumes((prev) => [res.data, ...prev])
     } catch (e: any) {
       setUploadError(e?.response?.data?.detail || '上传失败，请重试')
@@ -392,9 +420,22 @@ export default function ResumePage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                      查看详情 →
-                    </span>
+                    {/* Status badge */}
+                    {resume.status === 'parsing' ? (
+                      <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-50 text-amber-500 rounded-full border border-amber-100">
+                        <span className="w-2.5 h-2.5 border border-amber-300 border-t-amber-500 rounded-full animate-spin" />
+                        解析中
+                      </span>
+                    ) : resume.status === 'failed' ? (
+                      <span className="text-xs px-2 py-0.5 bg-red-50 text-red-400 rounded-full border border-red-100">
+                        解析失败
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 bg-green-50 text-green-500 rounded-full border border-green-100">
+                        已解析
+                      </span>
+                    )}
+                    
                     <button
                       onClick={(e) => handleDelete(e, resume.id)}
                       className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-all"
@@ -439,7 +480,14 @@ export default function ResumePage() {
                   </div>
                 ) : (
                   <div className="mt-3 pt-3 border-t border-gray-50">
-                    <p className="text-xs text-gray-400 italic">摘要提取中...</p>
+                    {resume.status === 'parsing' ? (
+                      <p className="text-xs text-amber-400 italic flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 border border-amber-300 border-t-amber-500 rounded-full animate-spin" />
+                        AI 正在解析简历，稍后自动更新...
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">摘要提取失败</p>
+                    )}
                   </div>
                 )}
               </div>

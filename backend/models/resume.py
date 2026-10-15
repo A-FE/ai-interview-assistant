@@ -17,4 +17,6 @@ class Resume(Base):
     # JSON: { name, years_exp, core_skills[], education, summary_text,
     #         work_experience[], projects[], certifications[] }
     summary: Mapped[str] = mapped_column(Text, nullable=True)
+    # "parsing" → LLM 摘要进行中；"done" → 已完成；"failed" → LLM 提取失败
+    status: Mapped[str] = mapped_column(String(16), default="done", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
