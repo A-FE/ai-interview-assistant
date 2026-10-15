@@ -43,6 +43,7 @@ export const authAPI = {
 export const jdAPI = {
   listSessions: () => api.get('/api/jd/sessions'),
   getSession: (id: number) => api.get(`/api/jd/sessions/${id}`),
+  deleteSession: (id: number) => api.delete(`/api/jd/sessions/${id}`),
   analyzeUrl: () => `${API_BASE}/api/jd/analyze`,
   ocr: (image_base64: string, mime_type: string) =>
     api.post('/api/jd/ocr', { image_base64, mime_type }),

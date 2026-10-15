@@ -35,7 +35,7 @@ export function Header() {
             AI
           </div>
           <span className="font-bold text-base text-gray-900 tracking-tight">
-            AI 面试<span className="text-indigo-600">助手</span>
+            AI 面试助手
           </span>
         </Link>
 

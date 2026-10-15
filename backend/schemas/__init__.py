@@ -37,6 +37,9 @@ class JDSummary(BaseModel):
     company: Optional[str] = None     # 公司名称
     core_stack: List[str] = []        # 核心技术栈
     level: Optional[str] = None       # 经验要求 e.g. 3-5年
+    salary: Optional[str] = None      # 薪资范围 e.g. 20-35k
+    city: Optional[str] = None        # 工作城市
+    education: Optional[str] = None   # 学历要求 e.g. 本科及以上
     match_score: Optional[int] = None # 匹配分 0-100（仅有简历时）
 
 
@@ -45,6 +48,8 @@ class JDSessionResponse(BaseModel):
     jd_text: str
     analysis_result: Optional[str] = None
     jd_summary: Optional[str] = None  # JSON string of JDSummary
+    title: Optional[str] = None
+    company: Optional[str] = None
     created_at: datetime
 
     class Config:

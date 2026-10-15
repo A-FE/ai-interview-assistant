@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""
     llm_base_url: str = "https://llm-axtdj52skmowrf1g.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-max"
-    vision_model: str = "qwen-vl-max"
+    vision_model: str = "qwen3.5-ocr"
 
     # JWT
     secret_key: str = "jobprep-secret-change-in-prod"

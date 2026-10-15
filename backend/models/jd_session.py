@@ -18,4 +18,7 @@ class JDSession(Base):
     study_plan_cache: Mapped[str] = mapped_column(Text, nullable=True)
     # Structured summary extracted at analysis time (JSON)
     jd_summary: Mapped[str] = mapped_column(Text, nullable=True)
+    # Denormalized fields from jd_summary for fast list queries
+    title: Mapped[str] = mapped_column(String(200), nullable=True, index=True)
+    company: Mapped[str] = mapped_column(String(200), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

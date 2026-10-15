@@ -10,6 +10,9 @@ export interface JDSummary {
   company: string | null
   core_stack: string[]
   level: string | null
+  salary: string | null
+  city: string | null
+  education: string | null
   match_score: number | null
 }
 
@@ -18,6 +21,8 @@ export interface JDSession {
   jd_text: string
   analysis_result: string | null
   jd_summary: string | null  // JSON string of JDSummary
+  title: string | null
+  company: string | null
   created_at: string
 }
 

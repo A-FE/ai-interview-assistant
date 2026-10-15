@@ -38,6 +38,9 @@ JSON 格式：
   "company": "公司名称（字符串，不确定则 null）",
   "core_stack": ["技术1", "技术2", "技术3"],
   "level": "经验要求（如 3-5年，不确定则 null）",
+  "salary": "薪资范围（如 20-35k·13薪，不确定则 null）",
+  "city": "工作城市（如 北京，不确定则 null）",
+  "education": "学历要求（如 本科及以上，不确定则 null）",
   "match_score": 匹配分数整数0-100（无简历则 null）
 }
 

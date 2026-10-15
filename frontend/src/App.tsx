@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Header } from './components/Header'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import JobOpportunities from './pages/JobOpportunities'
+import JDDetail from './pages/JDDetail'
 import JDAnalysis from './pages/JDAnalysis'
 import StudyPlan from './pages/StudyPlan'
 import Interview from './pages/Interview'
@@ -26,7 +28,9 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/jd" element={<RequireAuth><JDAnalysis /></RequireAuth>} />
+          <Route path="/jd" element={<RequireAuth><JobOpportunities /></RequireAuth>} />
+          <Route path="/jd/:id" element={<RequireAuth><JDDetail /></RequireAuth>} />
+          <Route path="/jd/:id/analysis" element={<RequireAuth><JDAnalysis /></RequireAuth>} />
           <Route path="/study" element={<RequireAuth><StudyPlan /></RequireAuth>} />
           <Route path="/interview" element={<RequireAuth><Interview /></RequireAuth>} />
           <Route path="/report/:id" element={<RequireAuth><Report /></RequireAuth>} />

@@ -1,225 +1,286 @@
-import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { jdAPI, postSSE } from '../api'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { jdAPI } from '../api'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import type { JDSession, JDSummary } from '../types'
+
+function parseSummary(raw: string | null): JDSummary | null {
+  if (!raw) return null
+  try { return JSON.parse(raw) as JDSummary } catch { return null }
+}
+
+// ── Section icons by keyword ─────────────────────────────────────────────────
+const SECTION_ICONS: [RegExp, string][] = [
+  [/技术栈|技术要求|技能|stack/i, '🛠️'],
+  [/薄弱|弱点|不足|gap/i, '⚠️'],
+  [/亮点|优势|优秀|highlight/i, '✨'],
+  [/代码|编程|算法|program/i, '💻'],
+  [/总结|综合|整体|概述|summary/i, '📋'],
+  [/建议|提升|改进|后续|suggest/i, '🎯'],
+  [/沟通|表达|软技能/i, '💬'],
+  [/系统设计|架构|design/i, '🏗️'],
+  [/项目|经验|project/i, '📁'],
+  [/薪资|待遇|salary/i, '💰'],
+  [/岗位|职位|job/i, '📌'],
+]
+
+function getSectionIcon(title: string): string {
+  for (const [re, icon] of SECTION_ICONS) {
+    if (re.test(title)) return icon
+  }
+  return '📄'
+}
+
+interface Section {
+  id: string
+  title: string
+  content: string
+  icon: string
+  level: number   // 1 | 2 | 3
+}
+
+function parseMarkdownSections(md: string): Section[] {
+  const lines = md.split('\n')
+  const sections: Section[] = []
+  let cur: { title: string; lines: string[]; level: number } | null = null
+
+  const flush = () => {
+    if (!cur) return
+    sections.push({
+      id: `sec-${sections.length}`,
+      title: cur.title,
+      content: cur.lines.join('\n').trim(),
+      icon: getSectionIcon(cur.title),
+      level: cur.level,
+    })
+    cur = null
+  }
+
+  for (const line of lines) {
+    const m = line.match(/^(#{1,3})\s+(.+)/)
+    if (m) { flush(); cur = { title: m[2].trim(), lines: [line], level: m[1].length } }
+    else if (cur) cur.lines.push(line)
+  }
+  flush()
+  return sections
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function JDAnalysis() {
-  const [jdText, setJdText] = useState('')
-  const [result, setResult] = useState('')
-  const [sessionId, setSessionId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [ocrLoading, setOcrLoading] = useState(false)
-  const [ocrError, setOcrError] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [session, setSession] = useState<JDSession | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [activeId, setActiveId] = useState('')
+  const observerRef = useRef<IntersectionObserver | null>(null)
 
-  const handleAnalyze = async () => {
-    if (!jdText.trim()) return
-    setLoading(true)
-    setResult('')
-    setSessionId(null)
-
-    try {
-      await postSSE(
-        jdAPI.analyzeUrl(),
-        { jd_text: jdText },
-        (chunk) => setResult((prev) => prev + chunk),
-        (extra) => {
-          if (extra?.session_id) setSessionId(extra.session_id as number)
-        },
-      )
-    } finally {
+  useEffect(() => {
+    if (!id) {
+      setError('无效的 JD ID')
       setLoading(false)
-    }
-  }
-
-  const handleImageUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setOcrError('请上传图片文件（PNG / JPG / WebP）')
       return
     }
-    setOcrError('')
-    setOcrLoading(true)
-    try {
-      const base64 = await fileToBase64(file)
-      const res = await jdAPI.ocr(base64, file.type)
-      const text: string = res.data.text || ''
-      if (!text.trim()) {
-        setOcrError('未能从图片中提取到文字，请尝试更清晰的截图')
-        return
-      }
-      setJdText(text)
-    } catch (e: any) {
-      setOcrError(e?.response?.data?.detail || 'OCR 识别失败，请稍后重试')
-    } finally {
-      setOcrLoading(false)
-    }
-  }
+    jdAPI.getSession(Number(id))
+      .then((res) => setSession(res.data))
+      .catch(() => setError('JD 不存在或无权访问'))
+      .finally(() => setLoading(false))
+  }, [id])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleImageUpload(file)
-    e.target.value = ''
-  }
+  // ── Scroll spy ────────────────────────────────────────────────────────────
+  const setupObserver = useCallback((sections: Section[]) => {
+    observerRef.current?.disconnect()
+    const ratios = new Map<string, number>()
+    observerRef.current = new IntersectionObserver(
+      (obs) => {
+        obs.forEach((e) => ratios.set(e.target.id, e.intersectionRatio))
+        let best = ''; let bestR = -1
+        ratios.forEach((r, eid) => { if (r > bestR) { bestR = r; best = eid } })
+        if (best) setActiveId(best)
+      },
+      { rootMargin: '-100px 0px -60% 0px', threshold: [0, 0.25, 0.5, 1] }
+    )
+    sections.forEach(({ id: sid }) => {
+      const el = document.getElementById(sid)
+      if (el) observerRef.current!.observe(el)
+    })
+  }, [])
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleImageUpload(file)
-  }
+  useEffect(() => () => observerRef.current?.disconnect(), [])
 
-  const textareaClass =
-    'w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 resize-none placeholder:text-gray-400'
+  // ── Init observer once session loads ─────────────────────────────────────
+  useEffect(() => {
+    if (!session?.analysis_result) return
+    const sections = parseMarkdownSections(session.analysis_result)
+    if (sections.length === 0) return
+    setActiveId(sections[0].id)
+    const raf = requestAnimationFrame(() => setupObserver(sections))
+    return () => cancelAnimationFrame(raf)
+  }, [session?.analysis_result, setupObserver])
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-24 text-gray-400 gap-3">
+      <span className="w-6 h-6 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <span className="text-sm">加载中...</span>
+    </div>
+  )
+
+  if (error || !session) return (
+    <div className="max-w-3xl mx-auto px-4 py-16 text-center text-gray-500">
+      <div className="text-4xl mb-4 opacity-30">😕</div>
+      <p>{error || '加载失败'}</p>
+      <button onClick={() => navigate(-1)} className="mt-4 text-sm text-indigo-600 hover:underline">← 返回</button>
+    </div>
+  )
+
+  const summary = parseSummary(session.jd_summary)
+  const title = session.title || summary?.title || '未识别岗位'
+  const company = session.company || summary?.company
+  const matchScore = summary?.match_score
+  const scoreRing =
+    matchScore == null ? ''
+    : matchScore >= 80 ? 'ring-emerald-300 text-emerald-600 bg-emerald-50'
+    : matchScore >= 60 ? 'ring-amber-300 text-amber-600 bg-amber-50'
+    : 'ring-red-300 text-red-500 bg-red-50'
+
+  const sections = parseMarkdownSections(session.analysis_result ?? '')
+
+  // scroll-mt accounts for: global Header 56px + action bar ~52px + gap
+  const scrollTo = (sid: string) => {
+    const el = document.getElementById(sid)
+    if (!el) return
+    const y = el.getBoundingClientRect().top + window.scrollY - 116
+    window.scrollTo({ top: y, behavior: 'smooth' })
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">JD 智能解析</h1>
-        <p className="text-sm text-gray-400 mt-1">粘贴或上传截图，AI 自动提取技术要求并评估匹配度</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: input */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                目标岗位 JD <span className="text-red-400 normal-case font-normal">必填</span>
-              </label>
-              {/* Upload screenshot button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={ocrLoading}
-                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-50"
-              >
-                {ocrLoading ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
-                    识别中...
-                  </>
-                ) : (
-                  <>
-                    <span>🖼️</span> 上传截图
-                  </>
-                )}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-            </div>
-
-            {/* Drop zone + textarea */}
-            <div
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              className="relative"
-            >
-              <textarea
-                className={textareaClass}
-                style={{ height: '260px' }}
-                placeholder="粘贴职位描述（JD）到此处，或将截图拖拽到这里..."
-                value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
-              />
-              {ocrLoading && (
-                <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
-                  <div className="flex items-center gap-2 text-sm text-indigo-600">
-                    <span className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
-                    正在识别截图文字...
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {ocrError && (
-              <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                <span>⚠️</span> {ocrError}
-              </p>
+      {/* ── Action bar (breadcrumb) — sticky below the global Header ─────── */}
+      <div className="sticky top-14 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors shrink-0"
+          >← 返回</button>
+          <div className="flex-1 min-w-0 px-3 border-l border-gray-200 flex items-center gap-3 flex-wrap">
+            {company && <p className="text-sm text-gray-500">{company}</p>}
+         
+            {summary?.city && (
+              <span className="text-sm text-gray-500">📍 {summary.city}</span>
             )}
-            {jdText && !ocrLoading && (
-              <p className="mt-1.5 text-xs text-gray-400">{jdText.length} 字</p>
+            {summary?.level && (
+              <span className="px-2.5 py-0.5 bg-gray-100 rounded-full text-xs font-medium text-gray-600">{summary.level}</span>
+            )}
+            {!summary?.salary && !summary?.city && !summary?.level && (
+              <span className="text-sm text-gray-400">{title}</span>
+            )}
+            {summary?.salary && (
+              <span className="text-sm font-bold text-red-500">{summary.salary}</span>
             )}
           </div>
-
-          <button
-            onClick={handleAnalyze}
-            disabled={loading || !jdText.trim()}
-            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 transition-all duration-200 shadow-sm shadow-indigo-100 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                AI 分析中...
-              </>
-            ) : '🔍 开始解析'}
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => navigate(`/study?jd=${session.id}`)}
+              className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 active:scale-95 transition-all shadow-sm"
+            >📚 复习清单</button>
+            <button
+              onClick={() => navigate(`/interview?jd=${session.id}`)}
+              className="px-4 py-2 text-sm font-semibold bg-orange-500 text-white rounded-xl hover:bg-orange-600 active:scale-95 transition-all shadow-sm"
+            >🎯 模拟面试</button>
+          </div>
         </div>
+      </div>
 
-        {/* Right: result */}
-        <div
-          className={`rounded-2xl border transition-all duration-300 ${
-            result
-              ? 'bg-white border-gray-100 shadow-sm'
-              : 'bg-gray-50 border-gray-100 border-dashed'
-          } p-5 min-h-64`}
-        >
-          {result ? (
+      {/* ── Body: left TOC + right content ───────────────────────────────── */}
+      <div className="max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
+
+        {/* ── Left sidebar TOC — sticky below Header + action bar ─────────── */}
+        {sections.length > 1 && (
+          <aside className="hidden lg:block w-52 shrink-0 sticky top-[108px] self-start">
+<nav className="flex flex-col">
+              {sections.map((sec) => {
+                const active = activeId === sec.id
+                // indent: h1 → 0, h2 → 12px, h3 → 24px
+                const indentPx = (sec.level - 1) * 12
+                return (
+                  <button
+                    key={sec.id}
+                    onClick={() => scrollTo(sec.id)}
+                    style={{ paddingLeft: `${12 + indentPx}px` }}
+                    className={`group flex items-center gap-2 pr-3 py-1.5 rounded-lg text-left transition-all duration-150 ${
+                      active
+                        ? 'bg-indigo-50 text-indigo-700'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+                    }`}
+                  >
+                    {/* Active indicator bar */}
+                    <span className={`w-0.5 rounded-full shrink-0 transition-all duration-150 ${
+                      active ? 'bg-indigo-500' : 'bg-transparent group-hover:bg-gray-300'
+                    } ${sec.level === 1 ? 'h-4' : 'h-3'}`} />
+                    <span className={`leading-snug truncate ${
+                      sec.level === 1
+                        ? `text-sm ${active ? 'font-semibold' : 'font-medium'}`
+                        : `text-xs ${active ? 'font-medium' : 'font-normal'} opacity-90`
+                    }`}>
+                      {sec.title}
+                    </span>
+                  </button>
+                )
+              })}
+            </nav>
+          </aside>
+        )}
+
+        {/* ── Main content ─────────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-6">
+
+          {/* Analysis section */}
+          {session.analysis_result ? (
             <>
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full" />
-                <span className="text-xs font-medium text-gray-500">分析结果</span>
-                {loading && (
-                  <span className="text-xs text-indigo-500 ml-auto animate-pulse">生成中...</span>
-                )}
+              <div className="flex items-center gap-3 px-1">
+                <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-base shadow-sm shrink-0">🔬</div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">深度分析报告</h2>
+                  <p className="text-xs text-gray-400">由 AI 自动生成，基于岗位描述综合分析</p>
+                </div>
               </div>
-              <MarkdownRenderer content={result} />
-              {!loading && sessionId && (
-                <div className="mt-6 pt-4 border-t border-gray-100 grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => navigate(`/study?jd=${sessionId}`)}
-                    className="py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1.5"
-                  >
-                    📚 生成复习清单
-                  </button>
-                  <button
-                    onClick={() => navigate(`/interview?jd=${sessionId}`)}
-                    className="py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 active:scale-95 transition-all duration-200 flex items-center justify-center gap-1.5"
-                  >
-                    🎯 模拟面试
-                  </button>
+
+              {sections.length > 0 ? (
+                <div className="flex flex-col">
+                  {sections.map((sec) => (
+                    <div
+                      key={sec.id}
+                      id={sec.id}
+                    >
+                        <MarkdownRenderer content={sec.content} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white border-[0.5px] border-gray-100 rounded-3xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+                  <div className="px-8 py-6">
+                    <MarkdownRenderer content={session.analysis_result} />
+                  </div>
                 </div>
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3 py-12">
-              <div className="text-4xl opacity-30">🤖</div>
-              <p className="text-sm">
-                {loading ? '正在分析，请稍候...' : '分析结果将显示在这里'}
-              </p>
+            <div className="bg-white border border-gray-100 rounded-3xl p-16 shadow-sm text-center">
+              <div className="text-5xl mb-4 opacity-20">🔬</div>
+              <p className="text-gray-500 font-medium mb-2">暂无分析结果</p>
+              <p className="text-sm text-gray-400">请先在工作机会页面解析此 JD</p>
+              <button
+                onClick={() => navigate('/jd')}
+                className="mt-6 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-all"
+              >前往工作机会</button>
             </div>
           )}
         </div>
       </div>
     </div>
   )
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      // Strip the "data:<mime>;base64," prefix
-      resolve(result.split(',')[1])
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }
