@@ -11,8 +11,9 @@ from backend.models.jd_session import JDSession
 from backend.models.report import InterviewReport
 from backend.models.study_progress import StudyStepProgress
 from backend.routers.auth import get_current_user
-from backend.schemas import StudyPlanRequest, StudyProgressUpdateRequest, StudyStepProgressResponse
+from backend.schemas import StudyPlanRequest, StudyProgressUpdateRequest, StudyStepProgressResponse, StudyChatRequest
 from backend.agents.study_planner import run_study_planner
+from backend.agents.study_tutor import run_study_tutor
 
 router = APIRouter(prefix="/api/study", tags=["study"])
 
@@ -130,3 +131,37 @@ async def update_progress(
     await db.execute(stmt)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/{jd_session_id}/steps/{step_index}/chat")
+async def study_step_chat(
+    jd_session_id: int,
+    step_index: int,
+    body: StudyChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream AI tutor response for a study step conversation.
+
+    SSE events:
+      {type: 'chunk', content: str}   — streaming text
+      {type: 'done'}                  — stream finished
+    """
+    # Verify the user owns this JD session
+    jd_result = await db.execute(
+        select(JDSession).where(
+            JDSession.id == jd_session_id,
+            JDSession.user_id == current_user.id,
+        )
+    )
+    if not jd_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="JD会话不存在")
+
+    messages_raw = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    async def generate():
+        async for text in run_study_tutor(step=body.step, messages=messages_raw):
+            yield f"data: {json.dumps({'type': 'chunk', 'content': text}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { studyAPI } from '../api'
+import { studyAPI, postSSE } from '../api'
+import { ChatWindow, type Message } from '../components/ChatWindow'
 import type { StudyPlan, StudyStep, StepStatus } from '../types'
 
-// ─── SSE helper ──────────────────────────────────────────────────────────────
+// ─── SSE helper for study plan ────────────────────────────────────────────────
 
 const API_BASE = 'http://localhost:8000'
 
@@ -103,12 +104,14 @@ function OverviewCard({
   fromCache,
   onStart,
   onRefresh,
+  onStartChat,
 }: {
   plan: StudyPlan
   progress: Record<number, StepStatus>
   fromCache: boolean
   onStart: () => void
   onRefresh: () => void
+  onStartChat: (stepIndex: number) => void
 }) {
   const doneCount = Object.values(progress).filter(
     (s) => s === 'mastered' || s === 'skipped',
@@ -203,19 +206,29 @@ function OverviewCard({
             const stepStatus = progress[step.index] ?? 'pending'
             const sc = STATUS_CONFIG[stepStatus]
             return (
-              <div key={step.index} className="flex items-center gap-3 px-4 py-3">
-                <span className={`text-sm ${sc.color}`}>{sc.icon}</span>
+              <div
+                key={step.index}
+                className="group flex items-center gap-3 px-4 py-3 hover:bg-indigo-50/40 transition-colors"
+              >
+                <span className={`text-sm shrink-0 ${sc.color}`}>{sc.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-800 truncate">{step.title}</span>
                     {step.is_weakness && (
-                      <span className="text-xs text-amber-600">⚠️</span>
+                      <span className="text-xs text-amber-600 shrink-0">⚠️</span>
                     )}
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded-md border ${s.bg} ${s.text} ${s.border} shrink-0`}>
+                <span className={`text-xs px-2 py-0.5 rounded-md border shrink-0 ${s.bg} ${s.text} ${s.border}`}>
                   {step.category}
                 </span>
+                {/* Hover: 开始学习 button */}
+                <button
+                  onClick={() => onStartChat(step.index)}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-200 text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium whitespace-nowrap"
+                >
+                  ▶ 开始学习
+                </button>
               </div>
             )
           })}
@@ -233,12 +246,14 @@ function StepCard({
   total,
   onAction,
   onPrev,
+  onStartChat,
 }: {
   step: StudyStep
   stepNum: number
   total: number
   onAction: (status: Exclude<StepStatus, 'pending'>) => void
   onPrev: () => void
+  onStartChat: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const s = CATEGORY_STYLES[step.category] ?? CATEGORY_STYLES['知识点']
@@ -315,7 +330,7 @@ function StepCard({
 
         {/* Resources — collapsible */}
         {step.resources.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-5">
             <button
               onClick={() => setExpanded((v) => !v)}
               className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 hover:text-indigo-500 transition-colors"
@@ -334,7 +349,17 @@ function StepCard({
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* AI guided learning CTA */}
+        <button
+          onClick={onStartChat}
+          className="w-full py-3 mb-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:from-indigo-600 hover:to-indigo-700 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 shadow-sm"
+        >
+          <span>💬</span>
+          <span>AI 引导学习</span>
+          <span className="text-indigo-200 text-xs">（对话深入理解）</span>
+        </button>
+
+        {/* Quick action buttons */}
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => onAction('mastered')}
@@ -363,6 +388,134 @@ function StepCard({
   )
 }
 
+// ─── Phase: Chatting — AI tutor for a single step ────────────────────────────
+
+function StepChatCard({
+  step,
+  stepNum,
+  total,
+  jdSessionId,
+  initialMessages,
+  onBack,
+  onComplete,
+}: {
+  step: StudyStep
+  stepNum: number
+  total: number
+  jdSessionId: number
+  initialMessages: Message[]
+  onBack: () => void
+  onComplete: (status: Exclude<StepStatus, 'pending'>) => void
+}) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const startedRef = useRef(false)
+
+  const s = CATEGORY_STYLES[step.category] ?? CATEGORY_STYLES['知识点']
+
+  // Build payload for the chat endpoint
+  const buildPayload = (msgs: Message[]) => ({
+    messages: msgs
+      .filter((m) => !m.isStreaming)
+      .map((m) => ({ role: m.role, content: m.content })),
+    step: step as unknown as Record<string, unknown>,
+  })
+
+  const streamResponse = async (payload: object) => {
+    const aiMsg: Message = { role: 'assistant', content: '', isStreaming: true }
+    setMessages((prev) => [...prev, aiMsg])
+    setIsStreaming(true)
+
+    await postSSE(
+      studyAPI.chatUrl(jdSessionId, step.index),
+      payload,
+      (chunk) =>
+        setMessages((prev) => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          updated[updated.length - 1] = { ...last, content: last.content + chunk }
+          return updated
+        }),
+    )
+
+    setMessages((prev) => {
+      const updated = [...prev]
+      updated[updated.length - 1] = { ...updated[updated.length - 1], isStreaming: false }
+      return updated
+    })
+    setIsStreaming(false)
+  }
+
+  // Auto-trigger AI opening on first mount (no prior messages)
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    if (initialMessages.length === 0) {
+      streamResponse(buildPayload([]))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleSend = async (content: string) => {
+    const userMsg: Message = { role: 'user', content }
+    const newMessages = [...messages.filter((m) => !m.isStreaming), userMsg]
+    setMessages(newMessages)
+    await streamResponse(buildPayload(newMessages))
+  }
+
+  return (
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 11rem)' }}>
+      {/* Header */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 mb-3 flex items-center gap-3 shrink-0">
+        <button
+          onClick={onBack}
+          className="text-sm text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 shrink-0"
+        >
+          ← 返回
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${s.bg} ${s.text} ${s.border}`}>
+              {step.category}
+            </span>
+            <span className="text-sm font-semibold text-gray-900 truncate">{step.title}</span>
+          </div>
+        </div>
+        <span className="text-xs text-gray-400 shrink-0 font-medium">{stepNum}/{total}</span>
+      </div>
+
+      {/* Chat area */}
+      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+        <ChatWindow
+          messages={messages}
+          isStreaming={isStreaming}
+          onSend={handleSend}
+          placeholder="输入你的想法，AI 会引导你深入理解..."
+        />
+      </div>
+
+      {/* Bottom: mark status buttons */}
+      <div className="shrink-0 mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
+        <p className="text-xs text-gray-400 text-center mb-2">学习完成后，标记你的掌握情况</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => onComplete('mastered')}
+            className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-sm font-semibold border border-emerald-200 active:scale-95 transition-all duration-150"
+          >
+            <span>✅</span> 已掌握，下一个
+          </button>
+          <button
+            onClick={() => onComplete('needs_review')}
+            className="flex items-center justify-center gap-2 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl text-sm font-semibold border border-amber-200 active:scale-95 transition-all duration-150"
+          >
+            <span>📖</span> 需要复习，下一个
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Phase: Summary ───────────────────────────────────────────────────────────
 
 function SummaryCard({
@@ -376,10 +529,10 @@ function SummaryCard({
 }) {
   const navigate = useNavigate()
 
-  const mastered     = plan.steps.filter((s) => progress[s.index] === 'mastered')
-  const needsReview  = plan.steps.filter((s) => progress[s.index] === 'needs_review')
-  const skipped      = plan.steps.filter((s) => progress[s.index] === 'skipped')
-  const pending      = plan.steps.filter((s) => !progress[s.index] || progress[s.index] === 'pending')
+  const mastered    = plan.steps.filter((s) => progress[s.index] === 'mastered')
+  const needsReview = plan.steps.filter((s) => progress[s.index] === 'needs_review')
+  const skipped     = plan.steps.filter((s) => progress[s.index] === 'skipped')
+  const pending     = plan.steps.filter((s) => !progress[s.index] || progress[s.index] === 'pending')
 
   return (
     <div className="space-y-4">
@@ -435,17 +588,20 @@ function SummaryCard({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-type Phase = 'loading' | 'generating' | 'overview' | 'studying' | 'summary'
+type Phase = 'loading' | 'generating' | 'overview' | 'studying' | 'chatting' | 'summary'
 
 export default function StudyPlan() {
   const [searchParams] = useSearchParams()
   const jdSessionId = Number(searchParams.get('jd'))
 
-  const [phase, setPhase] = useState<Phase>('loading')
-  const [plan, setPlan] = useState<StudyPlan | null>(null)
-  const [progress, setProgress] = useState<Record<number, StepStatus>>({})
+  const [phase, setPhase]           = useState<Phase>('loading')
+  const [plan, setPlan]             = useState<StudyPlan | null>(null)
+  const [progress, setProgress]     = useState<Record<number, StepStatus>>({})
   const [currentStep, setCurrentStep] = useState(0)
-  const [fromCache, setFromCache] = useState(false)
+  const [chatStep, setChatStep]     = useState(0)
+  const [fromCache, setFromCache]   = useState(false)
+  // Per-step chat message history (preserved when navigating away and back)
+  const [chatMessages, setChatMessages] = useState<Record<number, Message[]>>({})
 
   // Load plan + progress on mount
   const loadPlan = useCallback(
@@ -462,7 +618,6 @@ export default function StudyPlan() {
           async (receivedPlan, cached) => {
             setPlan(receivedPlan)
             setFromCache(cached)
-            // Load existing progress from DB
             try {
               const res = await studyAPI.getProgress(jdSessionId)
               const records: { step_index: number; status: StepStatus }[] = res.data
@@ -476,7 +631,7 @@ export default function StudyPlan() {
           },
         )
       } catch {
-        setPhase('overview') // show whatever we have
+        setPhase('overview')
       }
     },
     [jdSessionId],
@@ -487,8 +642,8 @@ export default function StudyPlan() {
   }, [loadPlan])
 
   // Find the starting step (first non-completed, or 0)
-  const findStartStep = (plan: StudyPlan, prog: Record<number, StepStatus>) => {
-    const first = plan.steps.findIndex(
+  const findStartStep = (p: StudyPlan, prog: Record<number, StepStatus>) => {
+    const first = p.steps.findIndex(
       (s) => !prog[s.index] || prog[s.index] === 'pending',
     )
     return first === -1 ? 0 : first
@@ -501,16 +656,28 @@ export default function StudyPlan() {
     setPhase('studying')
   }
 
+  // From overview: go straight to chat for a specific step
+  const handleStartChatFromOverview = (stepIndex: number) => {
+    if (!plan) return
+    const idx = plan.steps.findIndex((s) => s.index === stepIndex)
+    if (idx === -1) return
+    setChatStep(idx)
+    setPhase('chatting')
+  }
+
+  // From step card: open chat for current step
+  const handleStartChatFromCard = () => {
+    setChatStep(currentStep)
+    setPhase('chatting')
+  }
+
+  // Quick action from step card (no chat)
   const handleAction = async (status: Exclude<StepStatus, 'pending'>) => {
     if (!plan) return
     const step = plan.steps[currentStep]
     if (!step) return
-
-    // Optimistic update
     setProgress((prev) => ({ ...prev, [step.index]: status }))
-    // Persist to backend (fire-and-forget, non-blocking)
     studyAPI.updateProgress(jdSessionId, step.index, status).catch(() => {})
-
     const next = currentStep + 1
     if (next >= plan.steps.length) {
       setPhase('summary')
@@ -519,22 +686,52 @@ export default function StudyPlan() {
     }
   }
 
+  // Complete from chat: mark status, advance to next step
+  const handleChatComplete = async (status: Exclude<StepStatus, 'pending'>) => {
+    if (!plan) return
+    const step = plan.steps[chatStep]
+    if (!step) return
+    setProgress((prev) => ({ ...prev, [step.index]: status }))
+    studyAPI.updateProgress(jdSessionId, step.index, status).catch(() => {})
+    const next = chatStep + 1
+    if (next >= plan.steps.length) {
+      setPhase('summary')
+    } else {
+      setCurrentStep(next)
+      setChatStep(next)
+      setPhase('studying')
+    }
+  }
+
+  // Back from chat: return to step card at the same step
+  const handleChatBack = () => {
+    setCurrentStep(chatStep)
+    setPhase('studying')
+  }
+
   const handlePrev = () => {
     if (currentStep > 0) setCurrentStep((n) => n - 1)
+  }
+
+  // Save messages for a step when they update
+  const handleChatMessagesUpdate = (stepIdx: number, msgs: Message[]) => {
+    setChatMessages((prev) => ({ ...prev, [stepIdx]: msgs }))
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">个性化复习清单</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          {phase === 'studying' && plan
-            ? `逐步掌握每个知识点`
-            : '基于 JD 要求生成精准复习计划'}
-        </p>
-      </div>
+      {/* Page header — hidden during chat to save vertical space */}
+      {phase !== 'chatting' && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">个性化复习清单</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {phase === 'studying' && plan
+              ? '逐步掌握每个知识点'
+              : '基于 JD 要求生成精准复习计划'}
+          </p>
+        </div>
+      )}
 
       {(phase === 'loading' || phase === 'generating') && (
         <LoadingCard generating={phase === 'generating'} />
@@ -547,6 +744,7 @@ export default function StudyPlan() {
           fromCache={fromCache}
           onStart={handleStart}
           onRefresh={() => loadPlan(true)}
+          onStartChat={handleStartChatFromOverview}
         />
       )}
 
@@ -557,6 +755,24 @@ export default function StudyPlan() {
           total={plan.steps.length}
           onAction={handleAction}
           onPrev={handlePrev}
+          onStartChat={handleStartChatFromCard}
+        />
+      )}
+
+      {phase === 'chatting' && plan && plan.steps[chatStep] && (
+        <StepChatCard
+          key={chatStep}
+          step={plan.steps[chatStep]}
+          stepNum={chatStep + 1}
+          total={plan.steps.length}
+          jdSessionId={jdSessionId}
+          initialMessages={chatMessages[chatStep] ?? []}
+          onBack={handleChatBack}
+          onComplete={(status) => {
+            // Save current messages before advancing
+            handleChatMessagesUpdate(chatStep, [])
+            handleChatComplete(status)
+          }}
         />
       )}
 

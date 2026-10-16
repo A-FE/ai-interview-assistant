@@ -73,32 +73,32 @@ export function ChatWindow({ messages, isStreaming, onSend, placeholder = '输�
       </div>
 
       {/* Input bar */}
-      <form onSubmit={handleSubmit} className="border-t border-gray-100 bg-white p-3 flex gap-2 items-end">
-        <textarea
-          className="flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 placeholder:text-gray-400"
-          rows={2}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSubmit(e)
-            }
-          }}
-          placeholder={placeholder}
-          disabled={disabled || isStreaming}
-        />
-        <button
-          type="submit"
-          disabled={disabled || isStreaming || !input.trim()}
-          className="self-end px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all duration-200 shadow-sm"
-        >
-          {isStreaming ? (
-            <span className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-            </span>
-          ) : '发送'}
-        </button>
+      <form onSubmit={handleSubmit} className="border-t border-gray-100 bg-white p-3">
+        <div className="relative">
+          <textarea
+            className="w-full resize-none border border-gray-200 rounded-xl px-3 py-2.5 pr-20 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 placeholder:text-gray-400"
+            rows={2}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit(e)
+              }
+            }}
+            placeholder={placeholder}
+            disabled={disabled || isStreaming}
+          />
+          <span className="absolute right-3 bottom-2.5 text-xs text-gray-300 select-none pointer-events-none">
+            {isStreaming ? (
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+            ) : '↵ 发送'}
+          </span>
+        </div>
       </form>
     </div>
   )

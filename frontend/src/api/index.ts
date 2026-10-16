@@ -64,6 +64,8 @@ export const studyAPI = {
     api.get(`/api/study/${jdSessionId}/progress`),
   updateProgress: (jdSessionId: number, stepIndex: number, status: string) =>
     api.put(`/api/study/${jdSessionId}/progress`, { step_index: stepIndex, status }),
+  chatUrl: (jdSessionId: number, stepIndex: number) =>
+    `${API_BASE}/api/study/${jdSessionId}/steps/${stepIndex}/chat`,
 }
 
 // ─── Interview ───────────────────────────────────────────────────────────────

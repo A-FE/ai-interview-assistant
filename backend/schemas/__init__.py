@@ -81,6 +81,16 @@ class StudyProgressUpdateRequest(BaseModel):
     status: str  # "pending" | "mastered" | "needs_review" | "skipped"
 
 
+class StudyChatMessage(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+
+class StudyChatRequest(BaseModel):
+    messages: List[StudyChatMessage] = []
+    step: Dict[str, Any]  # StudyStep as plain dict
+
+
 class StudyStepProgressResponse(BaseModel):
     step_index: int
     status: str
