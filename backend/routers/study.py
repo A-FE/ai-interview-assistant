@@ -2,31 +2,21 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.user import User
 from backend.models.jd_session import JDSession
 from backend.models.report import InterviewReport
+from backend.models.study_progress import StudyStepProgress
 from backend.routers.auth import get_current_user
-from backend.schemas import StudyPlanRequest
+from backend.schemas import StudyPlanRequest, StudyProgressUpdateRequest, StudyStepProgressResponse
 from backend.agents.study_planner import run_study_planner
 
 router = APIRouter(prefix="/api/study", tags=["study"])
 
-
-async def _build_study_plan(
-    jd_session: JDSession,
-    history_report_json: str | None,
-) -> str:
-    """Run the planner and return the full plan text."""
-    chunks = []
-    async for chunk in run_study_planner(
-        jd_analysis=jd_session.analysis_result or jd_session.jd_text,
-        history_report_json=history_report_json,
-    ):
-        chunks.append(chunk)
-    return "".join(chunks)
+_VALID_STATUSES = {"pending", "mastered", "needs_review", "skipped"}
 
 
 @router.post("/plan")
@@ -35,12 +25,12 @@ async def get_study_plan(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stream personalized study plan.
+    """Stream structured study plan (JSON).
 
-    - Returns cached plan immediately if one exists and force_refresh is False.
-    - Otherwise generates a new plan, caches it, then streams it.
+    SSE events:
+      {type: 'generating'}          — keepalive while LLM runs
+      {type: 'done', plan: {...}, cached: bool}  — final structured plan
     """
-    # Fetch JD session
     jd_result = await db.execute(
         select(JDSession).where(
             JDSession.id == body.jd_session_id,
@@ -51,7 +41,6 @@ async def get_study_plan(
     if not jd_session:
         raise HTTPException(status_code=404, detail="JD会话不存在")
 
-    # Find the most recent report for this JD (if any)
     report_result = await db.execute(
         select(InterviewReport)
         .where(
@@ -64,34 +53,80 @@ async def get_study_plan(
     latest_report = report_result.scalar_one_or_none()
     history_report_json = latest_report.report_json if latest_report else None
 
-    force_refresh = getattr(body, "force_refresh", False)
+    # ── Cache hit ────────────────────────────────────────────────────────────
+    if jd_session.study_plan_cache and not body.force_refresh:
+        try:
+            cached_plan = json.loads(jd_session.study_plan_cache)
+        except (json.JSONDecodeError, ValueError):
+            cached_plan = None
 
-    # ── Cache hit: stream cached content directly ────────────────────────────
-    if jd_session.study_plan_cache and not force_refresh:
-        cached = jd_session.study_plan_cache
+        if cached_plan is not None:
+            async def cached_stream():
+                yield f"data: {json.dumps({'type': 'done', 'plan': cached_plan, 'cached': True}, ensure_ascii=False)}\n\n"
 
-        async def cached_stream():
-            # Yield in ~256-char chunks to keep the SSE feel
-            chunk_size = 256
-            for i in range(0, len(cached), chunk_size):
-                yield f"data: {json.dumps({'type': 'chunk', 'content': cached[i:i+chunk_size], 'cached': True})}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'cached': True})}\n\n"
+            return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
-        return StreamingResponse(cached_stream(), media_type="text/event-stream")
-
-    # ── Cache miss (or force refresh): generate, cache, stream ──────────────
+    # ── Generate, cache, stream ──────────────────────────────────────────────
     async def generate_stream():
-        full_plan = ""
-        async for chunk in run_study_planner(
+        plan = None
+        async for event in run_study_planner(
             jd_analysis=jd_session.analysis_result or jd_session.jd_text,
             history_report_json=history_report_json,
         ):
-            full_plan += chunk
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk, 'cached': False})}\n\n"
+            if event["type"] == "generating":
+                yield f"data: {json.dumps({'type': 'generating'})}\n\n"
+            elif event["type"] == "done":
+                plan = event["plan"]
 
-        # Persist cache
-        jd_session.study_plan_cache = full_plan
-        await db.commit()
-        yield f"data: {json.dumps({'type': 'done', 'cached': False})}\n\n"
+        if plan is not None:
+            jd_session.study_plan_cache = json.dumps(plan, ensure_ascii=False)
+            await db.commit()
+            yield f"data: {json.dumps({'type': 'done', 'plan': plan, 'cached': False}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+
+@router.get("/{jd_session_id}/progress", response_model=list[StudyStepProgressResponse])
+async def get_progress(
+    jd_session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all step-progress records for this user + JD session."""
+    result = await db.execute(
+        select(StudyStepProgress).where(
+            StudyStepProgress.user_id == current_user.id,
+            StudyStepProgress.jd_session_id == jd_session_id,
+        )
+    )
+    rows = result.scalars().all()
+    return rows
+
+
+@router.put("/{jd_session_id}/progress")
+async def update_progress(
+    jd_session_id: int,
+    body: StudyProgressUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upsert a single step's status."""
+    if body.status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"status 必须是 {_VALID_STATUSES} 之一")
+
+    stmt = (
+        sqlite_insert(StudyStepProgress)
+        .values(
+            user_id=current_user.id,
+            jd_session_id=jd_session_id,
+            step_index=body.step_index,
+            status=body.status,
+        )
+        .on_conflict_do_update(
+            index_elements=["user_id", "jd_session_id", "step_index"],
+            set_={"status": body.status},
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return {"ok": True}

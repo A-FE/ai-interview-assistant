@@ -89,7 +89,7 @@ export default function JDAnalysis() {
   const [session, setSession] = useState<JDSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeId, setActiveId] = useState('')
+  const [, setActiveId] = useState('')
   const observerRef = useRef<IntersectionObserver | null>(null)
 
   // Deep analysis state

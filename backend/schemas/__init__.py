@@ -76,6 +76,20 @@ class StudyPlanRequest(BaseModel):
     force_refresh: bool = False
 
 
+class StudyProgressUpdateRequest(BaseModel):
+    step_index: int
+    status: str  # "pending" | "mastered" | "needs_review" | "skipped"
+
+
+class StudyStepProgressResponse(BaseModel):
+    step_index: int
+    status: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Interview ───────────────────────────────────────────────────────────────
 
 class InterviewStartRequest(BaseModel):

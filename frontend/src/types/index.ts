@@ -75,3 +75,35 @@ export interface Resume {
   status: 'parsing' | 'done' | 'failed'
   created_at: string
 }
+
+// ─── Study Plan ──────────────────────────────────────────────────────────────
+
+export type StepStatus = 'pending' | 'mastered' | 'needs_review' | 'skipped'
+export type StepCategory = '知识点' | '算法题型' | '项目方向'
+export type StepPriority = '高' | '中' | '低'
+
+export interface StudyStep {
+  index: number
+  category: StepCategory
+  title: string
+  priority: StepPriority
+  difficulty: number    // 1-5
+  is_weakness: boolean
+  why_important: string
+  key_points: string[]
+  resources: string[]
+}
+
+export interface StudyPlan {
+  meta: {
+    estimated_hours: string
+    total_steps: number
+  }
+  steps: StudyStep[]
+}
+
+export interface StudyStepProgressRecord {
+  step_index: number
+  status: StepStatus
+  updated_at: string
+}

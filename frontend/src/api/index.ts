@@ -60,6 +60,10 @@ export const studyAPI = {
   planUrl: () => `${API_BASE}/api/study/plan`,
   planBody: (jd_session_id: number, force_refresh = false) =>
     ({ jd_session_id, force_refresh }),
+  getProgress: (jdSessionId: number) =>
+    api.get(`/api/study/${jdSessionId}/progress`),
+  updateProgress: (jdSessionId: number, stepIndex: number, status: string) =>
+    api.put(`/api/study/${jdSessionId}/progress`, { step_index: stepIndex, status }),
 }
 
 // ─── Interview ───────────────────────────────────────────────────────────────
