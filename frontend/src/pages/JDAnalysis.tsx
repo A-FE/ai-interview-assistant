@@ -79,32 +79,7 @@ function parseMarkdownSections(md: string): Section[] {
 
 // ── Resume selector (pick from user's ready resumes) ─────────────────────────
 
-function ResumeSelector({
-  resumes,
-  selectedId,
-  onChange,
-}: {
-  resumes: Resume[]
-  selectedId: number | null
-  onChange: (id: number) => void
-}) {
-  const ready = resumes.filter((r) => r.status === 'done')
-  if (ready.length === 0) return null
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-500 shrink-0">使用简历</span>
-      <select
-        value={selectedId ?? ''}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-700 max-w-[200px]"
-      >
-        {ready.map((r) => (
-          <option key={r.id} value={r.id}>{r.filename}</option>
-        ))}
-      </select>
-    </div>
-  )
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -205,10 +180,10 @@ export default function JDAnalysis() {
             setSession((prev) =>
               prev
                 ? {
-                    ...prev,
-                    analysis_result: accumulated,
-                    jd_summary: JSON.stringify(jd_summary),
-                  }
+                  ...prev,
+                  analysis_result: accumulated,
+                  jd_summary: JSON.stringify(jd_summary),
+                }
                 : prev
             )
           }
@@ -247,26 +222,12 @@ export default function JDAnalysis() {
   const summary = parseSummary(session.jd_summary)
   const title = session.title || summary?.title || '未识别岗位'
   const company = session.company || summary?.company
-  const matchScore = summary?.match_score
-  const scoreRing =
-    matchScore == null ? ''
-    : matchScore >= 80 ? 'ring-emerald-300 text-emerald-600 bg-emerald-50'
-    : matchScore >= 60 ? 'ring-amber-300 text-amber-600 bg-amber-50'
-    : 'ring-red-300 text-red-500 bg-red-50'
 
   const displayContent = session.analysis_result ?? (analyzing ? streamText : '')
   const sections = parseMarkdownSections(displayContent)
 
   const readyResumes = resumes.filter((r) => r.status === 'done')
   const hasReadyResume = readyResumes.length > 0
-
-  // scroll-mt accounts for: global Header 56px + action bar ~52px + gap
-  const scrollTo = (sid: string) => {
-    const el = document.getElementById(sid)
-    if (!el) return
-    const y = el.getBoundingClientRect().top + window.scrollY - 116
-    window.scrollTo({ top: y, behavior: 'smooth' })
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
@@ -309,45 +270,6 @@ export default function JDAnalysis() {
       {/* ── Body: left TOC + right content ───────────────────────────────── */}
       <div className="max-w-6xl mx-auto px-4 py-8 flex gap-6 items-start">
 
-        {/* ── Left sidebar TOC ─────────────────────────────────────────────── */}
-        {sections.length > 1 && (
-          <aside className="hidden lg:block w-52 shrink-0 sticky top-[108px] self-start">
-            <nav className="flex flex-col">
-              {sections.map((sec) => {
-                const active = activeId === sec.id
-                const indentPx = (sec.level - 1) * 12
-                return (
-                  <button
-                    key={sec.id}
-                    onClick={() => scrollTo(sec.id)}
-                    style={{ paddingLeft: `${12 + indentPx}px` }}
-                    className={`group flex items-center gap-2 pr-3 py-1.5 rounded-lg text-left transition-all duration-150 ${
-                      active
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : sec.isGap
-                          ? 'text-orange-600 hover:bg-orange-50'
-                          : sec.isMatch
-                            ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
-                    }`}
-                  >
-                    <span className={`w-0.5 rounded-full shrink-0 transition-all duration-150 ${
-                      active ? 'bg-indigo-500' : sec.isGap ? 'bg-orange-300' : 'bg-transparent group-hover:bg-gray-300'
-                    } ${sec.level === 1 ? 'h-4' : 'h-3'}`} />
-                    <span className={`leading-snug truncate ${
-                      sec.level === 1
-                        ? `text-sm ${active ? 'font-semibold' : sec.isGap ? 'font-semibold' : 'font-medium'}`
-                        : `text-xs ${active ? 'font-medium' : 'font-normal'} opacity-90`
-                    }`}>
-                      {sec.title}
-                    </span>
-                  </button>
-                )
-              })}
-            </nav>
-          </aside>
-        )}
-
         {/* ── Main content ─────────────────────────────────────────────────── */}
         <div className="flex-1 min-w-0 space-y-6">
 
@@ -364,11 +286,6 @@ export default function JDAnalysis() {
 
               {hasReadyResume ? (
                 <div className="flex flex-col items-center gap-4">
-                  <ResumeSelector
-                    resumes={resumes}
-                    selectedId={selectedResumeId}
-                    onChange={setSelectedResumeId}
-                  />
                   {analyzeError && (
                     <p className="text-xs text-red-500 flex items-center gap-1"><span>⚠️</span>{analyzeError}</p>
                   )}
@@ -404,7 +321,6 @@ export default function JDAnalysis() {
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin shrink-0" />
                 <span className="text-sm font-semibold text-indigo-700">AI 正在深度分析中...</span>
-                <span className="text-xs text-gray-400 ml-auto animate-pulse">重点关注能力差距</span>
               </div>
               {streamText && (
                 <div className="prose prose-sm max-w-none">
@@ -423,21 +339,12 @@ export default function JDAnalysis() {
                   <h2 className="text-base font-bold text-gray-900">深度分析报告</h2>
                   <p className="text-xs text-gray-400">基于简历与 JD 对比分析，重点展示能力差距</p>
                 </div>
-                {matchScore != null && (
-                  <span className={`shrink-0 w-14 h-14 rounded-full ring-2 flex items-center justify-center text-lg font-bold ${scoreRing}`}>
-                    {matchScore}
-                  </span>
-                )}
+
                 {/* 重新生成 — always visible when report exists */}
                 {!analyzing && (
                   <div className="flex items-center gap-2 shrink-0">
                     {hasReadyResume ? (
                       <>
-                        <ResumeSelector
-                          resumes={resumes}
-                          selectedId={selectedResumeId}
-                          onChange={setSelectedResumeId}
-                        />
                         <button
                           onClick={handleAnalyze}
                           disabled={!selectedResumeId}
@@ -459,35 +366,10 @@ export default function JDAnalysis() {
               </div>
 
               {sections.length > 0 ? (
-                <div className="flex flex-col gap-4">
-                  {sections.map((sec) => (
-                    <div
-                      key={sec.id}
-                      id={sec.id}
-                      className={`rounded-2xl overflow-hidden border transition-all ${
-                        sec.isGap
-                          ? 'border-orange-200 bg-orange-50/40 shadow-[0_1px_4px_rgba(251,146,60,0.12)]'
-                          : sec.isMatch
-                            ? 'border-gray-100 bg-gray-50/60 opacity-80'
-                            : 'border-gray-100 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)]'
-                      }`}
-                    >
-                      {sec.isGap && (
-                        <div className="px-5 py-2 bg-orange-100/60 border-b border-orange-200/60 flex items-center gap-2">
-                          <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">⚠️ 重点补强区域</span>
-                        </div>
-                      )}
-                      {sec.isMatch && (
-                        <div className="px-5 py-2 bg-gray-100/60 border-b border-gray-100 flex items-center gap-2">
-                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">✅ 已符合（略）</span>
-                        </div>
-                      )}
-                      <div className={`px-6 py-5 ${sec.isMatch ? 'py-3' : ''}`}>
-                        <MarkdownRenderer content={sec.content} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                sections.map((sec) => (
+                  <MarkdownRenderer key={sec.id}
+                    content={sec.content} className='mb-0' />
+                ))
               ) : (
                 <div className="bg-white border-[0.5px] border-gray-100 rounded-3xl shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
                   <div className="px-8 py-6">
