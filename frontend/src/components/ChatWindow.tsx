@@ -43,11 +43,7 @@ export function ChatWindow({ messages, isStreaming, onSend, placeholder = 'è¾“å…
               </div>
             )}
             <div
-              className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-tr-sm'
-                  : 'bg-white text-gray-900 rounded-tl-sm border border-gray-100'
-              }`}
+              className={`max-w-[78%] text-sm text-gray-900`}
             >
               {msg.role === 'assistant' ? (
                 <MarkdownRenderer content={msg.content} />

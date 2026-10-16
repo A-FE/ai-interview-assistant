@@ -1,5 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github.css'
 
 interface Props {
   content: string
@@ -23,15 +25,46 @@ export function MarkdownRenderer({ content, className = '' }: Props) {
           margin-bottom: 0.2rem;
         }
         .markdown-body ul li {
-          margin-top: 0.75rem; /* 每个主差距条目之间留白 */
+          margin-top: 0.75rem;
         }
         .markdown-body ul ul li {
           margin-top: 0.2rem;
           font-size: 0.95rem;
           color: #444;
         }
+
+        /* ── Code block styling ─────────────────────────────── */
+        .markdown-body pre {
+          margin: 0.75rem 0;
+          padding: 0;
+          border-radius: 0.5rem;
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+          background: #f6f8fa !important;
+        }
+        .markdown-body pre code.hljs {
+          padding: 0.9rem 1rem;
+          font-size: 0.8rem;
+          line-height: 1.6;
+          background: #f6f8fa !important;
+          border-radius: 0;
+        }
+        /* inline code */
+        .markdown-body :not(pre) > code {
+          background: #f3f4f6;
+          color: #d63384;
+          padding: 0.1em 0.35em;
+          border-radius: 0.25rem;
+          font-size: 0.85em;
+          border: 1px solid #e9ecef;
+        }
       `}</style>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   )
 }
