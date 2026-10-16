@@ -45,7 +45,7 @@ export default function Records() {
           onClick={() => navigate('/jd')}
           className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 active:scale-95 transition-all duration-200 shadow-sm"
         >
-          💼 工作机会
+          💼 职位分析
         </button>
       </div>
 
@@ -53,13 +53,6 @@ export default function Records() {
         <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="text-5xl mb-4 opacity-20">📋</div>
           <p className="text-gray-500 font-medium mb-2">还没有面试记录</p>
-          <p className="text-sm text-gray-400 mb-6">先添加一个工作机会，再开始模拟面试</p>
-          <button
-            onClick={() => navigate('/jd')}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition-all duration-200 shadow-sm"
-          >
-            去添加工作机会
-          </button>
         </div>
       ) : (
         <div className="space-y-3">

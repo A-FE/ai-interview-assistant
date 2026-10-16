@@ -94,7 +94,7 @@ function AddJDModal({
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-base font-bold text-gray-900">添加新工作机会</h2>
+          <h2 className="text-base font-bold text-gray-900">添加职位</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all text-lg leading-none">×</button>
         </div>
 
@@ -326,7 +326,7 @@ export default function JobOpportunities() {
       <div className="shrink-0 bg-white/80 backdrop-blur-sm border-b border-gray-100/80">
         <div className="max-w-6xl mx-auto px-6 h-12 flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="font-medium text-gray-700">工作机会</span>
+            <span className="font-medium text-gray-700">职位分析</span>
             {sessions.length > 0 && (
               <span className="text-xs text-gray-400">· {sessions.length} 个岗位</span>
             )}
@@ -377,7 +377,7 @@ export default function JobOpportunities() {
                 {sessions.length === 0 ? (
                   <>
                     <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-2xl mb-4">💼</div>
-                    <p className="text-sm font-semibold text-gray-600 mb-1">还没有工作机会</p>
+                    <p className="text-sm font-semibold text-gray-600 mb-1">还没有职位</p>
                     <p className="text-xs text-gray-400 mb-5 leading-relaxed">粘贴 JD 或上传截图<br/>AI 自动解析关键信息</p>
                     <button
                       onClick={() => setShowModal(true)}

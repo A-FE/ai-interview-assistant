@@ -42,9 +42,9 @@ export function Header() {
         <nav className="flex items-center gap-1">
           {user ? (
             <>
-              {navLink('/jd', 'JD 分析')}
-              {navLink('/resume', '简历')}
-              {navLink('/records', '分析记录')}
+              {navLink('/jd', '职位分析')}
+              {navLink('/records', '面试记录')}
+              {navLink('/resume', '简历管理')}
               {!user.is_guest && navLink('/kb', '知识库')}
               <div className="w-px h-4 bg-gray-200 mx-2" />
               <span className="text-xs text-gray-400 px-1">

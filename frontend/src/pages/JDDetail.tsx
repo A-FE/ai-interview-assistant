@@ -36,7 +36,7 @@ export default function JDDetail() {
       <div className="text-4xl mb-4 opacity-30">😕</div>
       <p>{error || '加载失败'}</p>
       <button onClick={() => navigate('/jd')} className="mt-4 text-sm text-indigo-600 hover:underline">
-        ← 返回工作机会
+        ← 返回职位分析
       </button>
     </div>
   )
@@ -51,7 +51,7 @@ export default function JDDetail() {
         onClick={() => navigate('/jd')}
         className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-6 transition-all"
       >
-        ← 工作机会
+        ← 职位列表
       </button>
 
       <div className="mb-6">

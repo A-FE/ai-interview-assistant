@@ -219,6 +219,15 @@ async def upload_resume(
         if filename.lower().endswith(".docx") else "application/msword"
     )
 
+    # Delete all existing resumes for this user before saving the new one
+    result = await db.execute(select(Resume).where(Resume.user_id == current_user.id))
+    old_resumes = result.scalars().all()
+    if old_resumes:
+        for old_resume in old_resumes:
+            await db.delete(old_resume)
+        await db.commit()
+        logger.info("[resume] 已删除用户 %s 的 %d 份旧简历", current_user.id, len(old_resumes))
+
     # Save immediately with status="parsing", return to frontend right away
     resume = Resume(
         user_id=current_user.id,
