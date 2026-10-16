@@ -51,6 +51,11 @@ async def run_interviewer_start(
         weak_points = extract_weak_points(history_report_json)
         user_content += f"\n\n## 历史薄弱知识点（优先考察）\n{weak_points}"
 
+    # Enrich with RAG knowledge based on JD keywords
+    rag_context = rag_search(jd_analysis[:300], k=3)
+    if rag_context and "暂无" not in rag_context and "失败" not in rag_context:
+        user_content += f"\n\n## 相关技术知识参考（来自知识库，可据此出题）\n{rag_context}"
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
@@ -80,6 +85,18 @@ async def run_interviewer_answer(
     if has_history:
         weak_points = extract_weak_points(history_report_json)
         context += f"\n\n## 历史薄弱知识点\n{weak_points}"
+
+    # RAG: query based on the latest user message for targeted knowledge retrieval
+    last_user_msg = ""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            last_user_msg = msg.get("content", "")
+            break
+    rag_query = (last_user_msg or jd_analysis)[:300]
+    rag_context = rag_search(rag_query, k=3)
+    if rag_context and "暂无" not in rag_context and "失败" not in rag_context:
+        context += f"\n\n## 知识库参考资料（可据此追问或点评）\n{rag_context}"
+
     lc_messages.append(SystemMessage(content=context))
 
     # Convert stored messages to LangChain message objects
