@@ -44,7 +44,7 @@ SYSTEM_PROMPT_FRESH = """你是一位经验丰富的技术面试辅导老师。
 - difficulty 为 1-5 整数（5最难）
 - is_weakness 无历史记录时始终为 false
 - steps 总数 6-12 个，覆盖知识点、算法题型、项目方向三类
-- 按 priority 降序排列（高→中→低）
+- 先按 key_points 与 JD 的相关性分组（相关性高的组在前），再在各组内按 priority 升序排列（低→中→高）
 - key_points 每步 3-5 条"""
 
 SYSTEM_PROMPT_WEAKNESS = """你是一位经验丰富的技术面试辅导老师，擅长针对性复习规划。

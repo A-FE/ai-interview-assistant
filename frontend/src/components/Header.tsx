@@ -29,7 +29,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="mx-auto px-4 h-14 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shadow-sm">
             AI
