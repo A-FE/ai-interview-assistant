@@ -1,7 +1,7 @@
 """
 RAG retrieval tool: query ChromaDB for relevant interview knowledge.
 """
-from langchain_community.vectorstores import Chroma
+from langchain_chroma.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from backend.config import settings
 

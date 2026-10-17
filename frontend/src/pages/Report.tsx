@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { reportAPI } from '../api'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
@@ -80,6 +80,12 @@ export default function Report() {
       .finally(() => setLoading(false))
   }, [id])
 
+  // ── Derive sections (safe when report is null) ─────────────────────────────
+  const sections = useMemo(
+    () => (report ? parseMarkdownSections(report.report_json) : []),
+    [report?.report_json],
+  )
+
   // ── Scroll spy via IntersectionObserver ────────────────────────────────────
   const observerRef = useRef<IntersectionObserver | null>(null)
 
@@ -118,6 +124,14 @@ export default function Report() {
 
   // ─────────────────────────────────────────────────────────────────────────
 
+  useEffect(() => {
+    if (sections.length === 0) return
+    setActiveId(sections[0].id)
+    // Wait one frame so the DOM cards are rendered before observing
+    const raf = requestAnimationFrame(() => setupObserver(sections))
+    return () => cancelAnimationFrame(raf)
+  }, [sections, setupObserver])
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-gray-400 gap-3">
@@ -127,17 +141,6 @@ export default function Report() {
     )
   }
   if (!report) return null
-
-  const sections = parseMarkdownSections(report.report_json)
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (sections.length === 0) return
-    setActiveId(sections[0].id)
-    // Wait one frame so the DOM cards are rendered before observing
-    const raf = requestAnimationFrame(() => setupObserver(sections))
-    return () => cancelAnimationFrame(raf)
-  }, [report.report_json])
 
   const score = report.overall_score
   const scoreColor = score == null ? '' : score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-500' : 'text-red-500'
