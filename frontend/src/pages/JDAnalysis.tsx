@@ -98,28 +98,64 @@ export default function JDAnalysis() {
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState('')
   const [streamText, setStreamText] = useState('')
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load session + resume list in parallel
+  // Refresh resume list and update selected ID
+  const refreshResumes = useCallback(async () => {
+    const res = await resumeAPI.list()
+    const list: Resume[] = res.data
+    setResumes(list)
+    const ready = list.filter((r) => r.status === 'done')
+    if (ready.length > 0) {
+      setSelectedResumeId(ready[0].id)
+      return true  // has ready resume
+    }
+    return false
+  }, [])
+
+  // Load session + resume list together; use allSettled so one failure doesn't block the other
   useEffect(() => {
     if (!id) {
       setError('无效的 JD ID')
       setLoading(false)
       return
     }
-    Promise.all([
+    Promise.allSettled([
       jdAPI.getSession(Number(id)),
       resumeAPI.list(),
-    ])
-      .then(([sessionRes, resumeRes]) => {
-        setSession(sessionRes.data)
-        const list: Resume[] = resumeRes.data
+    ]).then(([sessionResult, resumeResult]) => {
+      if (sessionResult.status === 'fulfilled') {
+        setSession(sessionResult.value.data)
+      } else {
+        setError('加载失败，请刷新重试')
+      }
+      if (resumeResult.status === 'fulfilled') {
+        const list: Resume[] = resumeResult.value.data
         setResumes(list)
         const ready = list.filter((r) => r.status === 'done')
         if (ready.length > 0) setSelectedResumeId(ready[0].id)
-      })
-      .catch(() => setError('加载失败，请刷新重试'))
-      .finally(() => setLoading(false))
+      }
+    }).finally(() => setLoading(false))
   }, [id])
+
+  // Poll while any resume is still parsing
+  useEffect(() => {
+    const hasParsing = resumes.some((r) => r.status === 'parsing')
+    if (!hasParsing) {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+      return
+    }
+    pollTimerRef.current = setTimeout(async () => {
+      await refreshResumes()
+    }, 3000)
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+    }
+  }, [resumes, refreshResumes])
+
+  useEffect(() => () => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+  }, [])
 
   // ── Scroll spy ────────────────────────────────────────────────────────────
   const setupObserver = useCallback((sections: Section[]) => {
@@ -227,7 +263,9 @@ export default function JDAnalysis() {
   const sections = parseMarkdownSections(displayContent)
 
   const readyResumes = resumes.filter((r) => r.status === 'done')
+  const parsingResumes = resumes.filter((r) => r.status === 'parsing')
   const hasReadyResume = readyResumes.length > 0
+  const isResumeProcessing = !hasReadyResume && parsingResumes.length > 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
@@ -280,7 +318,10 @@ export default function JDAnalysis() {
                 <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-md mb-4">🔬</div>
                 <h2 className="text-lg font-bold text-gray-900 mb-1">深度 AI 分析</h2>
                 <p className="text-sm text-gray-500 max-w-sm">
-                  上传简历后，AI 将重点分析你与该岗位的<span className="font-semibold text-orange-500">能力差距</span>，帮你制定针对性提升计划
+                  {hasReadyResume
+                    ? <>AI 将重点分析你的简历与该岗位的<span className="font-semibold text-orange-500">能力差距</span>，帮你制定针对性提升计划</>
+                    : <>上传简历后，AI 将重点分析你与该岗位的<span className="font-semibold text-orange-500">能力差距</span>，帮你制定针对性提升计划</>
+                  }
                 </p>
               </div>
 
@@ -297,6 +338,22 @@ export default function JDAnalysis() {
                     🔬 开始深度分析
                   </button>
                   <p className="text-xs text-gray-400">分析需要约 30–60 秒，将以流式方式实时展示</p>
+                </div>
+              ) : isResumeProcessing ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="px-5 py-4 bg-blue-50 border border-blue-200 rounded-2xl text-center max-w-sm">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <span className="w-4 h-4 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin shrink-0" />
+                      <p className="text-sm font-semibold text-blue-700">简历解析中，请稍候…</p>
+                    </div>
+                    <p className="text-xs text-blue-500">AI 正在处理你上传的简历，完成后可立即开始深度分析</p>
+                  </div>
+                  <button
+                    disabled
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold opacity-40 cursor-not-allowed shadow-md shadow-indigo-100"
+                  >
+                    🔬 开始深度分析
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">
@@ -344,15 +401,18 @@ export default function JDAnalysis() {
                 {!analyzing && (
                   <div className="flex items-center gap-2 shrink-0">
                     {hasReadyResume ? (
-                      <>
-                        <button
-                          onClick={handleAnalyze}
-                          disabled={!selectedResumeId}
-                          className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap"
-                        >
-                          🔄 重新生成
-                        </button>
-                      </>
+                      <button
+                        onClick={handleAnalyze}
+                        disabled={!selectedResumeId}
+                        className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap"
+                      >
+                        🔄 重新生成
+                      </button>
+                    ) : isResumeProcessing ? (
+                      <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-500 border border-blue-200 rounded-lg whitespace-nowrap bg-blue-50">
+                        <span className="w-3 h-3 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin shrink-0" />
+                        简历处理中…
+                      </span>
                     ) : (
                       <button
                         onClick={() => navigate('/resume')}
