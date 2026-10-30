@@ -6,7 +6,7 @@ import type { StudyPlan, StudyStep, StepStatus } from '../types'
 
 // ─── SSE helper for study plan ────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 async function fetchStudyPlan(
   jdSessionId: number,

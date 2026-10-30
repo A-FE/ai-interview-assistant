@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-AI 驱动的技术面试备考助手（毕业设计演示原型）。用户粘贴 JD，获取个性化复习清单，与模拟面试官进行多轮面试，收到结构化评估报告，并可在后续面试中针对历史薄弱点进行专项训练。
+AI 驱动的技术面试备考助手。用户粘贴 JD，获取个性化复习清单，与模拟面试官进行多轮面试，收到结构化评估报告，并可在后续面试中针对历史薄弱点进行专项训练。
 
 ## 快速启动
 
@@ -63,7 +63,7 @@ cd frontend && npm run lint     # oxlint
 
 **工具**（`tools/`）：
 - `rag_tool.py` — 对 `backend/rag/data/` 下的 Markdown 文档进行 ChromaDB 语义检索。
-- `code_sandbox.py` — 在子进程中运行用户提交的 Python 代码，限制 10 秒超时和 128MB 内存。**仅供演示，不可用于生产环境。**
+- `code_sandbox.py` — 在子进程中运行用户提交的 Python 代码，限制 10 秒超时和 128MB 内存。**已限制资源使用，实际部署时需进一步加固。**
 - `report_reader.py` — 从已存储的 `InterviewReport.report_json` 中提取薄弱点，用于薄弱点模式。
 
 **RAG**（`rag/`）：`init_kb.py` 将 `rag/data/` 下的 Markdown 文件分块、向量化后存入 `chroma_db/`。知识文档有变动时需重新执行。
