@@ -16,11 +16,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Auto-logout on 401
+// Auto-logout on 401 (except auth endpoints)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // 登录/注册接口的 401 错误不应触发自动跳转，应由页面组件处理
+    const isAuthEndpoint = err.config?.url?.includes('/api/auth/')
+    if (err.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('access_token')
       window.location.href = '/login'
     }

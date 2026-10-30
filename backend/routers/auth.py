@@ -95,8 +95,14 @@ async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
 async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
-    if not user or user.is_guest or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    # 精细化错误处理，帮助用户快速定位问题
+    if not user:
+        raise HTTPException(status_code=400, detail="该用户尚未注册，请先注册")
+    if user.is_guest:
+        raise HTTPException(status_code=400, detail="游客账户无法登录，请使用正式账号")
+    if not verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="密码错误，请重试")
 
     # Create default JD for user if they don't have one yet
     try:

@@ -24,7 +24,16 @@ export default function Login() {
       login(res.data)
       navigate('/jd')
     } catch (err: any) {
-      setError(err.response?.data?.detail || '操作失败，请重试')
+      const errorMsg = err.response?.data?.detail || '操作失败，请重试'
+      setError(errorMsg)
+
+      // 如果是登录模式且提示用户未注册，1.5秒后自动切换到注册模式
+      if (mode === 'login' && err.response?.status === 400 && errorMsg.includes('尚未注册')) {
+        setTimeout(() => {
+          setMode('register')
+          setError('')  // 清除错误提示，因为已切换到注册模式
+        }, 1500)
+      }
     } finally {
       setLoading(false)
     }
