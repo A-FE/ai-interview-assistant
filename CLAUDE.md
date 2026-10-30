@@ -93,5 +93,21 @@ React 19 + React Router v7 + Tailwind CSS v4。页面：`Home`、`Login`、`JDAn
 | `DASHSCOPE_API_KEY` | *（必填）* | 阿里云百炼 API Key |
 | `LLM_MODEL` | `qwen3.8-max` | 阿里云百炼上的模型名称 |
 | `SECRET_KEY` | `jobprep-secret-change-in-prod` | JWT 签名密钥 — 实际部署时务必修改 |
+| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | 允许访问的前端域名（逗号分隔） |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./jobprep.db` | |
 | `CHROMA_PERSIST_DIR` | `./chroma_db` | |
+
+### 前端环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `VITE_API_BASE_URL` | `http://localhost:8000` | 后端 API 地址 |
+
+## 部署到生产环境
+
+详见 [DEPLOYMENT.md](./DEPLOYMENT.md) 文档。
+
+**快速配置**：
+- 后端添加环境变量 `CORS_ORIGINS`，包含前端域名
+- 前端创建 `.env.production`，设置 `VITE_API_BASE_URL` 为后端 API 地址
+- 当前线上后端：https://ai-interview-assistant-f8oi.onrender.com
