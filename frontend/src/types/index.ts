@@ -23,6 +23,7 @@ export interface JDSession {
   jd_summary: string | null  // JSON string of JDSummary
   title: string | null
   company: string | null
+  is_default: boolean
   created_at: string
 }
 

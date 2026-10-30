@@ -11,7 +11,7 @@
 
 [English](./README.en.md) | 简体中文
 
-[在线演示](#) • [快速开始](#快速开始) • [部署指南](./DEPLOY.md) • [贡献指南](./CONTRIBUTING.md)
+[在线演示](https://ai-interview-assistant-vert.vercel.app/) • [快速开始](#快速开始) • [部署指南](./DEPLOY.md) • [贡献指南](./CONTRIBUTING.md)
 
 </div>
 
@@ -83,11 +83,11 @@
 ### JD 智能解析
 <img src="docs/screenshots/jd-analysis.png" alt="JD Analysis" width="600">
 
+### 根据 JD 制定学习计划
+<img src="docs/screenshots/jd-study.png" alt="JD Analysis" width="600">
+
 ### 模拟面试 + 代码判题
 <img src="docs/screenshots/interview.png" alt="Interview" width="600">
-
-### 面试评估报告
-<img src="docs/screenshots/report.png" alt="Report" width="600">
 
 > 📸 截图待添加，欢迎贡献！
 

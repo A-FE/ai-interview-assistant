@@ -12,8 +12,9 @@ AI 驱动的技术面试备考助手。用户粘贴 JD，获取个性化复习�
 # 一键启动（首次运行会自动初始化 RAG 知识库）
 ./start.sh
 
-# 手动启动
+# 手动启动（如有现有数据库，先运行迁移脚本）
 cp .env.example .env   # 填入 DASHSCOPE_API_KEY
+python migrate_add_is_default.py   # 迁移数据库（仅现有用户需要）
 .venv/bin/uvicorn backend.main:app --reload --port 8000
 .venv/bin/python -m backend.rag.init_kb   # 仅首次执行
 cd frontend && npm run dev
@@ -21,6 +22,8 @@ cd frontend && npm run dev
 
 - 后端 API 文档：http://localhost:8000/docs
 - 前端：http://localhost:5173
+
+> **新功能**：新用户注册或游客登录时，会自动获得一个"高级前端开发工程师"示例 JD，方便快速体验完整流程。
 
 ## 常用命令
 

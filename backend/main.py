@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.database import init_db
+from backend.database import init_db, get_db
 from backend.routers import auth, jd, study, interview, report, resume, rag
 
 logging.basicConfig(
@@ -12,10 +12,17 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    # Backfill default JDs for existing users in background
+    # Don't block startup - this happens when users log in instead
+    logger.info("Database initialized. Default JDs will be created when users log in.")
+
     yield
 
 

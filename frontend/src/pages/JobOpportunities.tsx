@@ -34,6 +34,7 @@ function AddJDModal({
   const [ocrError, setOcrError] = useState('')
   const [error, setError] = useState('')
   const [dupId, setDupId] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
@@ -64,6 +65,24 @@ function AddJDModal({
     } finally {
       setOcrLoading(false)
     }
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    // 查找图片类型的 ClipboardItem
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault() // 阻止默认粘贴行为
+        const file = item.getAsFile()
+        if (file) {
+          await handleImageUpload(file)
+        }
+        return
+      }
+    }
+    // 如果是文本，让默认行为继续
   }
 
   const handleSave = async () => {
@@ -100,7 +119,7 @@ function AddJDModal({
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">粘贴 JD 文字，或上传招聘截图</p>
+            <p className="text-xs text-gray-400">支持直接粘贴截图 (Ctrl+V / ⌘V)</p>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={ocrLoading || saving}
@@ -131,17 +150,39 @@ function AddJDModal({
           )}
 
           <div
-            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleImageUpload(f) }}
-            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              setIsDragging(false)
+              const f = e.dataTransfer.files?.[0]
+              if (f) handleImageUpload(f)
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setIsDragging(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              setIsDragging(false)
+            }}
             className="relative"
           >
             <textarea
               autoFocus
-              className="w-full h-48 border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all resize-none placeholder:text-gray-400"
-              placeholder="粘贴职位描述（JD）到此处，或将截图拖拽到这里..."
+              className={`w-full h-48 border-2 rounded-xl px-4 py-3 text-sm bg-gray-50 focus:bg-white focus:outline-none transition-all resize-none placeholder:text-gray-400 ${
+                isDragging
+                  ? 'border-indigo-400 border-dashed bg-indigo-50/30'
+                  : 'border-gray-200 focus:ring-2 focus:ring-indigo-400 focus:border-transparent'
+              }`}
+              placeholder="粘贴职位描述（JD）或截图（Ctrl+V / ⌘V），也可将图片拖拽到这里..."
               value={jdText}
               onChange={(e) => { setJdText(e.target.value); setDupId(null); setError('') }}
+              onPaste={handlePaste}
             />
+            {isDragging && (
+              <div className="absolute inset-0 bg-indigo-50/50 rounded-xl flex items-center justify-center pointer-events-none border-2 border-indigo-400 border-dashed">
+                <span className="text-sm text-indigo-600 font-medium">📋 松开以识别截图</span>
+              </div>
+            )}
             {ocrLoading && (
               <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
                 <span className="text-xs text-indigo-600 flex items-center gap-1.5">
@@ -206,9 +247,16 @@ function JDListItem({
     >
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold truncate ${selected ? 'text-indigo-700' : 'text-gray-800'}`}>
-            {title}
-          </p>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <p className={`text-sm font-semibold truncate ${selected ? 'text-indigo-700' : 'text-gray-800'}`}>
+              {title}
+            </p>
+            {session.is_default && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded border border-amber-200 shrink-0 font-medium">
+                示例
+              </span>
+            )}
+          </div>
           {company && <p className="text-xs text-gray-400 truncate mt-0.5">{company}</p>}
           {summary?.salary && (
             <p className="text-xs font-bold text-red-500 mt-1">{summary.salary}</p>
@@ -294,14 +342,25 @@ export default function JobOpportunities() {
     jdAPI.listSessions()
       .then((res) => {
         const data: JDSession[] = res.data
-        setSessions(data)
-        if (data.length > 0) setSelectedId(data[0].id)
+        // Sort: default JDs go last, others by created_at desc
+        const sorted = data.sort((a, b) => {
+          if (a.is_default && !b.is_default) return 1
+          if (!a.is_default && b.is_default) return -1
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+        setSessions(sorted)
+        if (sorted.length > 0) setSelectedId(sorted[0].id)
       })
       .finally(() => setLoading(false))
   }, [])
 
   const handleCreated = (session: JDSession) => {
-    setSessions((prev) => [session, ...prev])
+    // Insert new session at the top (before any default JDs)
+    setSessions((prev) => {
+      const defaults = prev.filter((s) => s.is_default)
+      const nonDefaults = prev.filter((s) => !s.is_default)
+      return [session, ...nonDefaults, ...defaults]
+    })
     setSelectedId(session.id)
   }
 

@@ -58,6 +58,7 @@ class JDSessionResponse(BaseModel):
     jd_summary: Optional[str] = None  # JSON string of JDSummary
     title: Optional[str] = None
     company: Optional[str] = None
+    is_default: bool = False
     created_at: datetime
 
     class Config:

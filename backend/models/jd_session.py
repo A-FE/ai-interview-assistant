@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, ForeignKey, Text
+from sqlalchemy import String, DateTime, Integer, ForeignKey, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.database import Base
 
@@ -21,4 +21,6 @@ class JDSession(Base):
     # Denormalized fields from jd_summary for fast list queries
     title: Mapped[str] = mapped_column(String(200), nullable=True, index=True)
     company: Mapped[str] = mapped_column(String(200), nullable=True, index=True)
+    # Flag for default/example JD
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
