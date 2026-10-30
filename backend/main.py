@@ -24,6 +24,19 @@ async def lifespan(app: FastAPI):
     # Don't block startup - this happens when users log in instead
     logger.info("Database initialized. Default JDs will be created when users log in.")
 
+    # 自动初始化 RAG 知识库
+    from backend.rag.init_kb import init_knowledge_base, check_kb_exists
+    try:
+        if not check_kb_exists():
+            logger.info("检测到知识库未初始化，开始初始化...")
+            init_knowledge_base()
+            logger.info("✅ 知识库初始化完成")
+        else:
+            logger.info("知识库已存在，跳过初始化")
+    except Exception as e:
+        logger.error(f"知识库初始化失败: {e}")
+        logger.warning("应用将继续启动，但 RAG 功能可能不可用")
+
     yield
 
 
@@ -53,4 +66,11 @@ app.include_router(rag.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "JobPrep Agent"}
+    from pathlib import Path
+    kb_exists = Path(settings.chroma_persist_dir).exists()
+    kb_status = "ready" if kb_exists else "initializing"
+    return {
+        "status": "ok",
+        "service": "JobPrep Agent",
+        "knowledge_base": kb_status
+    }

@@ -24,9 +24,15 @@ LLM_MODEL=qwen3.8-max
 DATABASE_URL=sqlite+aiosqlite:///./jobprep.db
 ```
 
-2. **初始化 RAG 知识库**
+2. **RAG 知识库**
 
-首次部署后需要初始化向量数据库（如果使用持久化存储）：
+知识库会在首次启动时**自动初始化**（约需 30-60 秒），无需手动操作。
+
+- 知识文档已包含在代码仓库中 (`backend/rag/data/*.md`)
+- 向量数据库会在启动时检测并自动生成
+- 后续启动会跳过初始化，启动速度正常
+
+如需手动初始化（可选）：
 
 ```bash
 python -m backend.rag.init_kb
@@ -57,9 +63,10 @@ npm run build
 ### Render.com
 
 **后端服务**：
-- Build Command: `pip install -r requirements.txt && python -m backend.rag.init_kb`
+- Build Command: `pip install -r requirements.txt`
 - Start Command: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
 - 在 Environment 页面添加上述环境变量
+- **注意**：知识库会在首次启动时自动初始化（约 30-60 秒），请确保健康检查有足够的延迟时间
 
 **前端服务**（如果也托管在 Render）：
 - Build Command: `cd frontend && npm install && npm run build`

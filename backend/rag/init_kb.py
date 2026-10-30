@@ -7,7 +7,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
@@ -23,6 +23,38 @@ DATA_DIR = Path(__file__).parent / "data"
 
 # DashScope embedding API only allows ≤10 texts per request
 _EMBED_BATCH_SIZE = 10
+
+
+def check_kb_exists() -> bool:
+    """检查知识库是否已初始化且有数据"""
+    persist_dir = Path(settings.chroma_persist_dir)
+
+    if not persist_dir.exists():
+        return False
+
+    # 检查是否有 chroma.sqlite3 文件且大小 > 0
+    db_file = persist_dir / "chroma.sqlite3"
+    if not db_file.exists() or db_file.stat().st_size < 1024:
+        return False
+
+    # 连接并检查集合是否有文档
+    try:
+        base_embeddings = OpenAIEmbeddings(
+            model="text-embedding-v3",
+            api_key=settings.dashscope_api_key,
+            base_url=settings.llm_base_url,
+            check_embedding_ctx_length=False,
+        )
+        embeddings = BatchedEmbeddings(base_embeddings)
+        vectorstore = Chroma(
+            collection_name=settings.chroma_collection,
+            persist_directory=str(persist_dir),
+            embedding_function=embeddings,
+        )
+        count = vectorstore._collection.count()
+        return count > 0
+    except Exception:
+        return False
 
 
 class BatchedEmbeddings(Embeddings):
@@ -47,7 +79,12 @@ class BatchedEmbeddings(Embeddings):
 
 
 def init_knowledge_base():
+    """初始化或重新初始化知识库"""
     print("🔄 初始化面试知识库...")
+
+    # 确保持久化目录存在
+    persist_dir = Path(settings.chroma_persist_dir)
+    persist_dir.mkdir(parents=True, exist_ok=True)
 
     base_embeddings = OpenAIEmbeddings(
         model="text-embedding-v3",
